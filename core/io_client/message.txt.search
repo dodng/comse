@@ -1,0 +1,19 @@
+{
+"cmd_type": "search",
+"show_info": {
+"title": "刘涛片场玩手机",
+"link": "http://www.toutiao.com/item/6348558963860046338/",
+"img_link": "http://p3.pstatp.com/large/10670003754e41bee194",
+"content": "上山打老虎"
+},
+"cmd_info": {
+"title4se": "刘涛片场玩手机",
+"start_id": 0,
+"ret_num": 10,
+"term4se": [
+"刘涛",
+"片场",
+"玩手机"
+]
+}
+}
