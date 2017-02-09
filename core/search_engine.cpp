@@ -142,7 +142,8 @@ bool Search_Engine::search(std::vector<std::string> & in_term_list,
 	if (in_term_list.size() <= 0 ||
 			in_query.size() <= 0 ||
 			in_start_id < 0 ||
-			in_ret_num <= 0)
+			in_ret_num <= 0 ||
+			in_max_ret_num <= 0)
 	{return false;}
 
 	//select a term which has min index numbers
@@ -154,7 +155,7 @@ bool Search_Engine::search(std::vector<std::string> & in_term_list,
 
 		if (i_hash_value.sum_node_num <= 0) 
 		{//this term not exist index
-			return false;
+			return true;
 		}
 
 		if (i == 0)
@@ -226,6 +227,8 @@ bool Search_Engine::search(std::vector<std::string> & in_term_list,
 			if (it != _info_dict.end())
 			{
 				out_vec.push_back(it->second);
+				//dump score to json
+				out_vec.back()["comse_score"] = vect_score[i].score;
 			}
 		}
 	}

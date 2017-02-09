@@ -281,8 +281,8 @@ void InitListenSocket(struct event_base *base, short port)
 	struct event * p_listen_ev = &listen_ev;
 	if (0 == p_listen_ev) return ;
 	int listenFd = socket(AF_INET, SOCK_STREAM, 0); 
+	int ret = 0;
 	fcntl(listenFd, F_SETFL, O_NONBLOCK); // set non-blocking 
-	printf("server listen fd=%d port=%d\n", listenFd,port);
 	reg_add_event(p_listen_ev,listenFd,EV_READ,AcceptConn,p_listen_ev,base,NULL);
 	// bind & listen 
 	sockaddr_in sin; 
@@ -291,7 +291,8 @@ void InitListenSocket(struct event_base *base, short port)
 	sin.sin_addr.s_addr = INADDR_ANY; 
 	sin.sin_port = htons(port); 
 	bind(listenFd, (const sockaddr*)&sin, sizeof(sin)); 
-	listen(listenFd, 5); 
+	ret = listen(listenFd, LISTEN_PENDING_QUEUE_LENGTH); 
+	printf("server listen fd=%d port=%d retrun:%d errno:%d\n", listenFd,port,ret,errno);
 }
 
 void InitUpdateListenSocket(struct event_base *base, short port) 
@@ -299,8 +300,8 @@ void InitUpdateListenSocket(struct event_base *base, short port)
 	struct event * p_listen_ev = &update_listen_ev;
 	if (0 == p_listen_ev) return ;
 	int listenFd = socket(AF_INET, SOCK_STREAM, 0); 
+	int ret = 0;
 	fcntl(listenFd, F_SETFL, O_NONBLOCK); // set non-blocking 
-	printf("server listen update fd=%d port=%d\n", listenFd,port);
 	reg_add_event(p_listen_ev,listenFd,EV_READ,AcceptUpdateConn,p_listen_ev,base,NULL);
 	// bind & listen 
 	sockaddr_in sin; 
@@ -309,7 +310,8 @@ void InitUpdateListenSocket(struct event_base *base, short port)
 	sin.sin_addr.s_addr = INADDR_ANY; 
 	sin.sin_port = htons(port); 
 	bind(listenFd, (const sockaddr*)&sin, sizeof(sin)); 
-	listen(listenFd, 5); 
+	ret = listen(listenFd, LISTEN_PENDING_QUEUE_LENGTH); 
+	printf("server listen update fd=%d port=%d retrun:%d errno:%d\n", listenFd,port,ret,errno);
 }
 
 ///////////process thread/////////////////

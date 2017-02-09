@@ -55,7 +55,11 @@ int policy_entity::get_out_json()
 	|| json_in["cmd_info"].isNull() 
 	|| json_in["show_info"].isNull() 
 	|| json_in["cmd_info"]["title4se"].isNull() )
-	{ret = 1;}
+	{
+		ret = 1;
+		json_out["ret_code"] = ret;
+		return ret;
+	}
 
 	if (!json_in["cmd_info"]["term4se"].isNull() && json_in["cmd_info"]["term4se"].size() > 0)
 	{
@@ -114,7 +118,7 @@ int policy_entity::get_out_json()
 		//parse start_id and ret_num
 		if (!json_in["cmd_info"]["start_id"].isNull()) {start_id = json_in["cmd_info"]["start_id"].asInt();}
 		if (!json_in["cmd_info"]["ret_num"].isNull()) {ret_num = json_in["cmd_info"]["ret_num"].asInt();}
-		
+
 		if (!is_term_list_in)
 		{//get term_list
 			policy_cut_query(g_jieba,query,term_list);
@@ -144,7 +148,7 @@ int policy_entity::get_out_json()
 
 
 	json_out["ret_code"] = ret;
-	return 0;
+	return ret;
 }
 
 //true return 0,other return > 0
