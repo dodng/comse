@@ -112,6 +112,7 @@ void http_entity::parse_header(char *p_str)
 	std::vector<std::string> split_rst1 = split(str_here,"\r\n\r\n");
 	if (split_rst1.size() >= 2)
 	{
+		status = http_status_parse_head_done;
 		parse_header_len = split_rst1[0].size();
 		std::vector<std::string> split_rst2 = split(split_rst1[0],"\r\n");
 		if (split_rst2.size() >= 2)
@@ -174,11 +175,36 @@ std::string http_entity::print_all()
 	return rst;
 }
 
-int http_entity::parse_done()
+int http_entity::parse_done(char *p_str)
 {//return -1 error, 0 continue receive ,1 parse done
+//do parse
 	int rst = -1;
-	if ( parse_first_row_len <= 0 || parse_header_len <= 0)
-	{return rst;}
+	if (0 == p_str) {return -2;}
+
+	if (status == http_status_init)
+	{
+		parse_header(p_str);
+	}
+	
+	if (status == http_status_parse_head_done)
+	{
+		parse_body(p_str);
+	}
+//done
+//	if ( parse_first_row_len <= 0 || parse_header_len <= 0)
+//	{return rst;}
+	if (status == http_status_init)
+	{
+		return 0;	
+	}
+	else if (status == http_status_parse_head_done)
+	{ //next
+	}
+	else
+	{
+		return 1;
+	}
+	
 
 	//Content-Length
 	std::map<std::string,std::string>::iterator it;
@@ -186,6 +212,7 @@ int http_entity::parse_done()
 	if (it == header_map.end())	
 	{
 		rst = 1;
+		status = http_status_parse_body_done;
 		return rst;
 	}
 
@@ -194,7 +221,10 @@ int http_entity::parse_done()
 	if (parse_body_len < ct_len)
 	{rst = 0;}
 	else
-	{rst = 1;}
+	{
+		rst = 1;
+		status = http_status_parse_body_done;
+	}
 
 	return rst;	
 }

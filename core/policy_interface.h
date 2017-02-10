@@ -18,6 +18,13 @@ class policy_entity{
 		int get_out_json();
 		int cook_senddata(char *send_buff_p,int buff_len,int &send_len);
 		std::string print_all();
+		void reset()
+		{
+			it_http = 0;
+			json_in.clear();
+			json_out.clear();
+		}
+		int do_one_action(http_entity *it_http_p,char *send_buff_p,int buff_len,int &send_len);
 	private:
 		http_entity *it_http;
 		Json::Value json_in;

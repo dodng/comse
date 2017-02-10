@@ -23,11 +23,34 @@ Search_Engine g_search_engine;
 
 ////////////////////////////////
 
+inline std::string my_to_string(int value)
+{
+	std::string ret_str;
+	char value_arr[32] = {0};
+	snprintf(value_arr,sizeof(value_arr),"%d",value);
+	ret_str = value_arr;
+	return ret_str;
+}
+
+inline void cook_send_buff(std::string & str,char *buff_p,int buff_len,int &cooked_len)
+{
+	if (str.size() <= 0
+		|| 0 == buff_p
+		|| buff_len <= 0
+		|| cooked_len < 0)
+	{return;}
+
+	if ( (cooked_len + str.size())> buff_len) {return;}
+
+	memcpy(buff_p + cooked_len,str.c_str(),str.size());
+	cooked_len += str.size();
+}
+
 //true return 0,other return > 0
 int policy_entity::parse_in_json()
 {
 	if (0 == it_http) {return 1;}
-	if (1 != it_http->parse_done())	{return 2;}
+	if (!it_http->parse_over())	{return 2;}
 
 	std::map<std::string,std::string>::iterator it;
 //find data field
@@ -61,7 +84,9 @@ int policy_entity::get_out_json()
 		return ret;
 	}
 
-	if (!json_in["cmd_info"]["term4se"].isNull() && json_in["cmd_info"]["term4se"].size() > 0)
+	if (!json_in["cmd_info"]["term4se"].isNull() 
+		&& json_in["cmd_info"]["term4se"].isArray()
+		&& json_in["cmd_info"]["term4se"].size() > 0)
 	{
 		is_term_list_in = true;
 		for (unsigned int i = 0; i < json_in["cmd_info"]["term4se"].size(); i++)
@@ -158,11 +183,13 @@ int policy_entity::cook_senddata(char *send_buff_p,int buff_len,int &send_len)
 	if (buff_len <= 0 || send_len < 0) {return 3;}
 
 	std::string json_str = g_json_writer.write(json_out);
-	if (json_str.size() <= 0) {return 2;}
-
-	int cook_len = json_str.size() < buff_len ? json_str.size(): buff_len;
-	memcpy(send_buff_p,json_str.c_str(),cook_len);
-	send_len = cook_len;
+	if (json_str.size() <= 3) {return 2;}//null is 3 length
+	
+	std::string str = "HTTP/1.1 200 OK\r\nServer: comse\r\n";
+	cook_send_buff(str,send_buff_p,buff_len,send_len);
+	str = "Content-Length: " + my_to_string(json_str.size()) + "\r\n\r\n";
+	cook_send_buff(str,send_buff_p,buff_len,send_len);
+	cook_send_buff(json_str,send_buff_p,buff_len,send_len);
 	return 0;
 
 }
@@ -176,4 +203,29 @@ std::string policy_entity::print_all()
 	rst += json_out.toStyledString();
 	return rst;
 
+}
+
+
+int policy_entity::do_one_action(http_entity *it_http_p,char *send_buff_p,int buff_len,int &send_len)
+{
+	int ret1 = 0,ret2 = 0,ret3 = 0;
+	reset();
+	set_http(it_http_p);
+	ret1 = parse_in_json();
+	ret2 = get_out_json();
+	ret3 = cook_senddata(send_buff_p,buff_len,send_len);
+	//if error occur
+	if (ret3 != 0)
+	{
+		std::string str = "HTTP/1.1 200 OK\r\nServer: comse\r\n";
+		std::string body_str = "parse_in_json: " + my_to_string(ret1) + "&";
+		body_str += "get_out_json: " + my_to_string(ret2) + "&"; 
+		body_str += "cook_senddata: " + my_to_string(ret3);
+//jisuan size
+		str += "Content-Length: " + my_to_string(body_str.size()) + "\r\n\r\n";
+		
+		cook_send_buff(str,send_buff_p,buff_len,send_len);
+		cook_send_buff(body_str,send_buff_p,buff_len,send_len);
+	}
+	return ret3;
 }

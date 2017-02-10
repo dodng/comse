@@ -175,17 +175,25 @@ bool Search_Engine::search(std::vector<std::string> & in_term_list,
 	//get recall index numbers vector
 	std::vector<uint32_t> query_in;
 	std::vector<uint32_t> query_out;
-	_index_core.all_query_index(in_term_list[term_pos],query_in);
+	std::vector<uint32_t> & query_in_it = query_in;
+	std::vector<uint32_t> & query_out_it = query_out;
+
+	_index_core.all_query_index(in_term_list[term_pos],query_in_it);
 
 	for (int i = 0;i < in_term_list.size(); i++)
 	{
 		if (i == term_pos) {continue;}
-		_index_core.cross_query_index(in_term_list[i],query_in,query_out);
-		query_in = query_out;
-		query_out.clear();
+		_index_core.cross_query_index(in_term_list[i],query_in_it,query_out_it);
+
+		std::vector<uint32_t> & tmp_it = query_in_it;
+		query_in_it = query_out_it;
+		query_out_it = tmp_it;
+		query_out_it.clear();
+//		query_in = query_out;        // ignore this step to reduce time 
+//		query_out.clear();
 	}
 	//check in_start_id and in_ret_num
-	if (in_start_id >= query_in.size())
+	if (in_start_id >= query_in_it.size())
 	{return false;}
 	if (in_ret_num >= in_max_ret_num)
 	{in_ret_num = in_max_ret_num;}
@@ -196,19 +204,19 @@ bool Search_Engine::search(std::vector<std::string> & in_term_list,
 	{
 		AUTO_LOCK auto_lock(&_info_dict_lock,false);
 
-		for (int i = 0; i < query_in.size(); i++)
+		for (int i = 0; i < query_in_it.size(); i++)
 		{
-			std::map<uint32_t,Json::Value>::iterator it = _info_dict.find(query_in[i]);
+			std::map<uint32_t,Json::Value>::iterator it = _info_dict.find(query_in_it[i]);
 			if (it != _info_dict.end())
 			{
 				float score = policy_jisuan_score(in_query,in_term_list,it->second);
-				sort_myclass my(query_in[i], score);
+				sort_myclass my(query_in_it[i], score);
 				vect_score.push_back(my);
 			}
 			else
 			{
 				//not find,default score is 0.0
-				sort_myclass my(query_in[i], DEFAULT_SCORE);
+				sort_myclass my(query_in_it[i], DEFAULT_SCORE);
 				vect_score.push_back(my);
 			}
 

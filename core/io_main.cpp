@@ -67,6 +67,13 @@ class interface_data
 			sd = -1;
 		}
 		~interface_data(){;}
+		void reset()
+		{
+			now_send_len = 0;
+			now_recv_len = 0;
+			policy.reset();
+			http.reset();
+		}
 		//data
 		char recv_buff[BUFF_SIZE];
 		char send_buff[BUFF_SIZE];
@@ -147,11 +154,13 @@ void SendData(int fd, short int events, void *arg)
 		printf("Thread[%x]\tClient[%d]:Send=%s\n",(int)pthread_self(),fd, buff);
 		//send success
 		p_it->status = status_send;
+		//reset
+		p_it->reset();
 		//regist recv event
-		//reg_add_event(p_ev,p_it->sd,EV_READ,RecvData,p_it,base,&tv_recv_timeout);
+		reg_add_event(p_ev,p_it->sd,EV_READ,RecvData,p_it,base,&tv_recv_timeout);
 		//flush stdout
 		fflush(stdout);
-		goto GC;
+//		goto GC;
 	}
 	else
 	{
@@ -198,10 +207,10 @@ void RecvData(int fd, short int events, void *arg)
 		p_it->status = status_recv;
 		//regist send event
 		p_it->now_recv_len += len;
-		p_it->http.parse_header(buff);
-		p_it->http.parse_body(buff);
+//		p_it->http.parse_header(buff);
+//		p_it->http.parse_body(buff);
+		int parse_ret = p_it->http.parse_done(buff);
 		printf("%s",(p_it->http.print_all()).c_str());
-		int parse_ret = p_it->http.parse_done();
 		printf("http parse_done ret:[%d]\n",parse_ret);
 
 		if (parse_ret < 0 )
@@ -210,10 +219,13 @@ void RecvData(int fd, short int events, void *arg)
 		{reg_add_event(p_ev,p_it->sd,EV_READ,RecvData,p_it,base,&tv_recv_timeout);}
 		else
 		{
+#if 0
 		p_it->policy.set_http(&p_it->http);
 		p_it->policy.parse_in_json();
 		p_it->policy.get_out_json();
 		p_it->policy.cook_senddata(p_it->send_buff,p_it->send_buff_len,p_it->now_send_len);
+#endif
+		p_it->policy.do_one_action(&p_it->http,p_it->send_buff,p_it->send_buff_len,p_it->now_send_len);
 
 		printf("%s",(p_it->policy.print_all()).c_str());
 		
