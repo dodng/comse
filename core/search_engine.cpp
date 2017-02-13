@@ -1,11 +1,15 @@
 #include "search_engine.h"
 #include "limonp/Md5.hpp"
 #include <algorithm>
+#include <iostream>
 
 extern cppjieba::Jieba g_jieba;
+extern Json::Reader g_json_reader;
+extern Json::FastWriter g_json_writer;
 
 #define DEFAULT_SCORE (0.0f)
 #define DEFAULT_NEED_SHRINK (1024)
+#define MAX_GETLINE_BUFF (1024*1024)
 
 float policy_jisuan_score(std::string &query,std::vector<std::string> & term_list,Json::Value & one_info)
 {
@@ -209,7 +213,7 @@ bool Search_Engine::search(std::vector<std::string> & in_term_list,
 			std::map<uint32_t,Json::Value>::iterator it = _info_dict.find(query_in_it[i]);
 			if (it != _info_dict.end())
 			{
-				float score = policy_jisuan_score(in_query,in_term_list,it->second);
+				float score = policy_jisuan_score(in_query,in_term_list,it->second["show_info"]);
 				sort_myclass my(query_in_it[i], score);
 				vect_score.push_back(my);
 			}
@@ -234,7 +238,7 @@ bool Search_Engine::search(std::vector<std::string> & in_term_list,
 			std::map<uint32_t,Json::Value>::iterator it = _info_dict.find(vect_score[i].pos);
 			if (it != _info_dict.end())
 			{
-				out_vec.push_back(it->second);
+				out_vec.push_back(it->second["show_info"]);
 				//dump score to json
 				out_vec.back()["comse_score"] = vect_score[i].score;
 			}
@@ -243,3 +247,98 @@ bool Search_Engine::search(std::vector<std::string> & in_term_list,
 	return true;
 }
 
+bool Search_Engine::dump_to_file()
+{
+	std::ofstream os;  
+	os.open(_dump_file.c_str());
+
+	if (!os.is_open())
+	{
+		return false;
+	}
+	else
+	{
+		{
+			AUTO_LOCK auto_lock(&_info_dict_lock,false);
+			for (std::map<uint32_t,Json::Value>::iterator it = _info_dict.begin(); it != _info_dict.end(); ++it)
+			{
+				os << g_json_writer.write(it->second);  
+			}
+		}
+		os.close();  
+		return true;
+	}
+}
+
+bool Search_Engine::load_from_file()
+{
+	std::ifstream is;  
+	is.open(_load_file.c_str());
+	char in_buff[MAX_GETLINE_BUFF] = {0};
+
+	if (!is.is_open())
+	{
+		return false;
+	}
+
+	while (!is.eof() )  
+	{  
+		is.getline(in_buff,MAX_GETLINE_BUFF);
+		Json::Value tmp_json;
+
+		//parse use json
+		if (!g_json_reader.parse(in_buff,(char *)in_buff + strlen(in_buff), tmp_json)) 
+		{
+			continue;
+		}
+
+		//parse json ok 
+		bool is_term_list_in = false;
+		std::vector<std::string> term_list;
+
+		if ( tmp_json["cmd_type"].isNull()
+				|| tmp_json["cmd_info"].isNull() 
+				|| tmp_json["show_info"].isNull() 
+				|| tmp_json["cmd_info"]["title4se"].isNull() )
+		{
+			continue;
+		}
+
+		if (!tmp_json["cmd_info"]["term4se"].isNull() 
+				&& tmp_json["cmd_info"]["term4se"].isArray()
+				&& tmp_json["cmd_info"]["term4se"].size() > 0)
+		{
+			is_term_list_in = true;
+			for (unsigned int i = 0; i < tmp_json["cmd_info"]["term4se"].size(); i++)
+			{
+				term_list.push_back(tmp_json["cmd_info"]["term4se"][i].asString());
+			}
+		}
+
+		//parse query
+		std::string query = tmp_json["cmd_info"]["title4se"].asString();
+
+		//parse cmd_type
+		if (tmp_json["cmd_type"].asString() == "add")
+		{
+			if (!is_term_list_in)
+			{//get term_list
+				policy_cut_query(g_jieba,query,term_list);
+			}
+
+			if (add(term_list,tmp_json))
+			{
+				//return true
+			}
+			else
+			{
+				//return false
+			}
+
+		}
+		else
+		{continue;}
+	}
+		
+	return true;
+}

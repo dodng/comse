@@ -19,18 +19,28 @@ void policy_cut_query(cppjieba::Jieba &jieba,std::string & query,std::vector<std
 
 class Search_Engine{
 	public:
-		Search_Engine()
+		Search_Engine(char *p_file_dump_file = 0,char * p_file_load_file = 0)
 		{
 			//lock init
 			pthread_rwlock_init(&_info_dict_lock,NULL);	
 			pthread_rwlock_init(&_info_md5_dict_lock,NULL);
-			max_index_num = 0;	
+			max_index_num = 0;
+			//init dump and load file
+			if (0 != p_file_dump_file)
+			{_dump_file = p_file_dump_file;}
+
+			if (0 != p_file_load_file)
+			{
+				_load_file = p_file_load_file;
+				load_from_file();
+			}	
 		}
 		~Search_Engine()
 		{
 			//lock destroy
 			pthread_rwlock_destroy(&_info_dict_lock);
 			pthread_rwlock_destroy(&_info_md5_dict_lock);
+
 		}
 		bool add(std::vector<std::string> & term_list,Json::Value & one_info);
 		bool del(std::vector<std::string> & term_list,Json::Value & one_info);
@@ -38,6 +48,8 @@ class Search_Engine{
 				std::string & in_query,
 				std::vector<Json::Value> &out_vec,
 				int in_start_id = 0,int in_ret_num = 20,int in_max_ret_num = 40);
+		bool dump_to_file();
+		bool load_from_file();
 	private:
 		//index
 		Index_Core _index_core;
@@ -50,6 +62,9 @@ class Search_Engine{
 		Json::FastWriter json_writer;
 		//data
 		uint32_t max_index_num;
+		//file
+		std::string _dump_file;
+		std::string _load_file;
 
 };
 #endif

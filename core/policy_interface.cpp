@@ -19,7 +19,7 @@ cppjieba::Jieba g_jieba(DICT_PATH,
 
 Json::Reader g_json_reader;
 Json::FastWriter g_json_writer; 
-Search_Engine g_search_engine;
+Search_Engine g_search_engine("./index/dump.json.file","./index/load.json.file");
 
 ////////////////////////////////
 
@@ -105,7 +105,8 @@ int policy_entity::get_out_json()
 		{//get term_list
 			policy_cut_query(g_jieba,query,term_list);
 		}
-		if (g_search_engine.add(term_list,json_in["show_info"]))
+		if (g_search_engine.add(term_list,json_in))
+//		if (g_search_engine.add(term_list,json_in["show_info"]))
 		{
 			//return true
 			ret = 0;
@@ -166,9 +167,20 @@ int policy_entity::get_out_json()
 			ret = 300;
 		}
 	}
+	else if (json_in["cmd_type"].asString() == "dump_all" )
+	{
+		if (g_search_engine.dump_to_file())
+		{
+			ret = 0;
+		}
+		else
+		{
+			ret = 400;
+		}
+	}
 	else
 	{
-		ret = 400;
+		ret = 500;
 	}
 
 
@@ -184,7 +196,7 @@ int policy_entity::cook_senddata(char *send_buff_p,int buff_len,int &send_len)
 
 	std::string json_str = g_json_writer.write(json_out);
 	if (json_str.size() <= 3) {return 2;}//null is 3 length
-	
+
 	std::string str = "HTTP/1.1 200 OK\r\nServer: comse\r\n";
 	cook_send_buff(str,send_buff_p,buff_len,send_len);
 	str = "Content-Length: " + my_to_string(json_str.size()) + "\r\n\r\n";
@@ -221,9 +233,9 @@ int policy_entity::do_one_action(http_entity *it_http_p,char *send_buff_p,int bu
 		std::string body_str = "parse_in_json: " + my_to_string(ret1) + "&";
 		body_str += "get_out_json: " + my_to_string(ret2) + "&"; 
 		body_str += "cook_senddata: " + my_to_string(ret3);
-//jisuan size
+		//jisuan size
 		str += "Content-Length: " + my_to_string(body_str.size()) + "\r\n\r\n";
-		
+
 		cook_send_buff(str,send_buff_p,buff_len,send_len);
 		cook_send_buff(body_str,send_buff_p,buff_len,send_len);
 	}
