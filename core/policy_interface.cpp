@@ -11,6 +11,9 @@ const char* const USER_DICT_PATH = "./cppjieba/dict/user.dict.utf8";
 const char* const IDF_PATH = "./cppjieba/dict/idf.utf8";
 const char* const STOP_WORD_PATH = "./cppjieba/dict/stop_words.utf8";
 
+char* DUMP_FILE_PATH = "./index/dump.json.file";
+char* LOAD_FILE_PATH = "./index/load.json.file";
+
 cppjieba::Jieba g_jieba(DICT_PATH,
 		HMM_PATH,
 		USER_DICT_PATH,
@@ -19,7 +22,7 @@ cppjieba::Jieba g_jieba(DICT_PATH,
 
 Json::Reader g_json_reader;
 Json::FastWriter g_json_writer; 
-Search_Engine g_search_engine("./index/dump.json.file","./index/load.json.file");
+Search_Engine g_search_engine(DUMP_FILE_PATH,LOAD_FILE_PATH);
 
 ////////////////////////////////
 

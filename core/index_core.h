@@ -2,7 +2,13 @@
 #define __INDEX_CORE_H_
 
 #include <stdint.h>
+
+#ifdef _USE_HASH_
+#include <tr1/unordered_map>
+#else
 #include <map>
+#endif
+
 #include <vector>
 #include <string>
 #include <pthread.h>
@@ -211,7 +217,11 @@ class Index_Core
 		index_hash_value find_index(std::string index_hash_key);
 
 	private:
+#ifdef _USE_HASH_
+		std::tr1::unordered_map<std::string,index_hash_value> index_map;
+#else
 		std::map<std::string,index_hash_value> index_map;
+#endif
 		uint32_t _data_num;
 		uint32_t _inner_lock_num;
 		pthread_rwlock_t index_map_key_lock;//big lock

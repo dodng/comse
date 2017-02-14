@@ -1,7 +1,7 @@
 CC = g++
 #FLAGS = --shared -g -Wall -fPIC
 #FLAGS = -g -Wall 
-FLAGS = -g
+FLAGS = -g -D _USE_HASH_
 #LIBS_INSTALL_DIR = ../../libs
 INC = -I./libevent-1.4.14-stable -I./jsoncpp/include -I./cppjieba/include -I./cppjieba/deps
 #EXE = 3rd_ip_entry.so

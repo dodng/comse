@@ -9,7 +9,11 @@ void Index_Core::all_query_index(std::string index_hash_key,std::vector<uint32_t
 	// need all data
 	{// enter big lock space
 		AUTO_LOCK auto_lock(&index_map_key_lock,false);
+#ifdef _USE_HASH_
+		std::tr1::unordered_map<std::string,index_hash_value>::iterator it = index_map.find(index_hash_key);
+#else
 		std::map<std::string,index_hash_value>::iterator it = index_map.find(index_hash_key);
+#endif
 		if (it != index_map.end())
 		{//enter tiny lock space
 			uint32_t skip_value = 0;
@@ -45,7 +49,11 @@ void Index_Core::cross_query_index(std::string index_hash_key,std::vector<uint32
 	//need cross data
 	{// enter big lock space
 		AUTO_LOCK auto_lock(&index_map_key_lock,false);
+#ifdef _USE_HASH_
+		std::tr1::unordered_map<std::string,index_hash_value>::iterator it = index_map.find(index_hash_key);
+#else
 		std::map<std::string,index_hash_value>::iterator it = index_map.find(index_hash_key);
+#endif
 		if (it != index_map.end())
 		{//enter tiny lock space
 			AUTO_LOCK auto_lock_2(&index_inner_lock_p[it->second.my_pos % _inner_lock_num],false);
@@ -99,8 +107,11 @@ bool Index_Core::insert_index(std::string index_hash_key,uint32_t insert_in_valu
 		{return false;}
 
 		index_node *p_node_last = 0;
-
+#ifdef _USE_HASH_
+		std::tr1::unordered_map<std::string,index_hash_value>::iterator it;
+#else
 		std::map<std::string,index_hash_value>::iterator it;
+#endif
 		{// enter big lock space
 			AUTO_LOCK auto_lock(&index_map_key_lock,false);
 			it = index_map.find(index_hash_key);
@@ -225,7 +236,11 @@ bool Index_Core::delete_index(std::string index_hash_key,uint32_t delete_in_valu
 		{return false;}
 
 		uint32_t delete_num = 0;
+#ifdef _USE_HASH_
+		std::tr1::unordered_map<std::string,index_hash_value>::iterator it;
+#else
 		std::map<std::string,index_hash_value>::iterator it;
+#endif
 
 		{// enter big lock space
 			AUTO_LOCK auto_lock(&index_map_key_lock,false);
@@ -293,8 +308,11 @@ bool Index_Core::clear_index(std::string index_hash_key)
 		bool hit_hash_key = false;
 		if (index_hash_key.size() <= 0 )
 		{return false;}
-
+#ifdef _USE_HASH_
+		std::tr1::unordered_map<std::string,index_hash_value>::iterator it;
+#else
 		std::map<std::string,index_hash_value>::iterator it;
+#endif
 		index_hash_value one_hash_value = {0};//init 0
 
 		{// enter big lock space
@@ -373,7 +391,11 @@ bool Index_Core::shrink_index(std::string index_hash_key,bool adapt_mem)
 			// need all data
 			{// enter big lock space
 				AUTO_LOCK auto_lock(&index_map_key_lock,false);
+#ifdef _USE_HASH_
+				std::tr1::unordered_map<std::string,index_hash_value>::iterator it = index_map.find(index_hash_key);
+#else
 				std::map<std::string,index_hash_value>::iterator it = index_map.find(index_hash_key);
+#endif
 				if (it != index_map.end())
 				{//enter tiny lock space
 					uint32_t skip_value = 0;
@@ -469,7 +491,11 @@ bool Index_Core::shrink_index(std::string index_hash_key,bool adapt_mem)
 
 		//3.erase old and insert new
 		index_hash_value old_one_hash_value = {0};//init 0
+#ifdef _USE_HASH_
+		std::tr1::unordered_map<std::string,index_hash_value>::iterator it;
+#else
 		std::map<std::string,index_hash_value>::iterator it;
+#endif
 
 		{// enter big lock space
 			AUTO_LOCK auto_lock(&index_map_key_lock,true);
@@ -540,7 +566,11 @@ index_hash_value Index_Core::find_index(std::string index_hash_key)
 	index_hash_value ret_data = {0};
 	{// enter big lock space
 		AUTO_LOCK auto_lock(&index_map_key_lock,false);
+#ifdef _USE_HASH_
+		std::tr1::unordered_map<std::string,index_hash_value>::iterator it = index_map.find(index_hash_key);
+#else
 		std::map<std::string,index_hash_value>::iterator it = index_map.find(index_hash_key);
+#endif
 		if (it != index_map.end())
 		{
 			ret_data = it->second;
@@ -556,7 +586,11 @@ void Index_Core::clear_all_index()
 
 		{// enter big lock space
 			AUTO_LOCK auto_lock(&index_map_key_lock,true);
+#ifdef _USE_HASH_
+			for (std::tr1::unordered_map<std::string,index_hash_value>::iterator it = index_map.begin(); it!=index_map.end(); ++it)
+#else
 			for (std::map<std::string,index_hash_value>::iterator it = index_map.begin(); it!=index_map.end(); ++it)
+#endif
 			{
 				index_hash_value one_hash_value = {0};//init 0
 				one_hash_value = it->second;
