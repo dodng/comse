@@ -4,8 +4,6 @@
 #include <iostream>
 
 extern cppjieba::Jieba g_jieba;
-extern Json::Reader g_json_reader;
-extern Json::FastWriter g_json_writer;
 
 #define DEFAULT_SCORE (0.0f)
 #define DEFAULT_NEED_SHRINK (1024)
@@ -282,7 +280,7 @@ bool Search_Engine::dump_to_file()
 			for (std::map<uint32_t,Json::Value>::iterator it = _info_dict.begin(); it != _info_dict.end(); ++it)
 #endif
 			{
-				os << g_json_writer.write(it->second);  
+				os << json_writer.write(it->second);  
 			}
 		}
 		os.close();  
@@ -307,7 +305,7 @@ bool Search_Engine::load_from_file()
 		Json::Value tmp_json;
 
 		//parse use json
-		if (!g_json_reader.parse(in_buff,(char *)in_buff + strlen(in_buff), tmp_json)) 
+		if (!json_reader.parse(in_buff,(char *)in_buff + strlen(in_buff), tmp_json)) 
 		{
 			continue;
 		}
