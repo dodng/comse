@@ -59,7 +59,11 @@ bool Search_Engine::add(std::vector<std::string> & term_list,Json::Value & one_i
 	//add info_md5
 	{// enter lock
 		AUTO_LOCK auto_lock(&_info_md5_dict_lock,true);
+#ifdef _USE_HASH_
+		std::tr1::unordered_map<std::string,uint32_t>::iterator it = _info_md5_dict.find(md5_str);
+#else
 		std::map<std::string,uint32_t>::iterator it = _info_md5_dict.find(md5_str);
+#endif
 		//check if add
 		if (it != _info_md5_dict.end())
 		{
@@ -101,7 +105,11 @@ bool Search_Engine::del(std::vector<std::string> & term_list,Json::Value & one_i
 	//add info_md5
 	{// enter lock
 		AUTO_LOCK auto_lock(&_info_md5_dict_lock,true);
+#ifdef _USE_HASH_
+		std::tr1::unordered_map<std::string,uint32_t>::iterator it = _info_md5_dict.find(md5_str);
+#else
 		std::map<std::string,uint32_t>::iterator it = _info_md5_dict.find(md5_str);
+#endif
 		//check if del
 		if (it != _info_md5_dict.end())
 		{
@@ -210,7 +218,11 @@ bool Search_Engine::search(std::vector<std::string> & in_term_list,
 
 		for (int i = 0; i < query_in_it.size(); i++)
 		{
+#ifdef _USE_HASH_
+			std::tr1::unordered_map<uint32_t,Json::Value>::iterator it = _info_dict.find(query_in_it[i]);
+#else
 			std::map<uint32_t,Json::Value>::iterator it = _info_dict.find(query_in_it[i]);
+#endif
 			if (it != _info_dict.end())
 			{
 				float score = policy_jisuan_score(in_query,in_term_list,it->second["show_info"]);
@@ -235,7 +247,11 @@ bool Search_Engine::search(std::vector<std::string> & in_term_list,
 		AUTO_LOCK auto_lock(&_info_dict_lock,false);
 		for (int i = in_start_id;i < in_start_id + in_ret_num && i < vect_score.size();i++)
 		{
+#ifdef _USE_HASH_
+			std::tr1::unordered_map<uint32_t,Json::Value>::iterator it = _info_dict.find(vect_score[i].pos);
+#else
 			std::map<uint32_t,Json::Value>::iterator it = _info_dict.find(vect_score[i].pos);
+#endif
 			if (it != _info_dict.end())
 			{
 				out_vec.push_back(it->second["show_info"]);
@@ -260,7 +276,11 @@ bool Search_Engine::dump_to_file()
 	{
 		{
 			AUTO_LOCK auto_lock(&_info_dict_lock,false);
+#ifdef _USE_HASH_
+			for (std::tr1::unordered_map<uint32_t,Json::Value>::iterator it = _info_dict.begin(); it != _info_dict.end(); ++it)
+#else
 			for (std::map<uint32_t,Json::Value>::iterator it = _info_dict.begin(); it != _info_dict.end(); ++it)
+#endif
 			{
 				os << g_json_writer.write(it->second);  
 			}

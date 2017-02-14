@@ -2,7 +2,13 @@
 #define COMSE_SEARCH_ENGINE_H_
 
 #include <string>
+
+#ifdef _USE_HASH_
+#include <tr1/unordered_map>
+#else
 #include <map>
+#endif
+
 #include "json/json.h"
 #include "index_core.h"
 #include <pthread.h>
@@ -53,9 +59,14 @@ class Search_Engine{
 	private:
 		//index
 		Index_Core _index_core;
+#ifdef _USE_HASH_
+		std::tr1::unordered_map<uint32_t,Json::Value> _info_dict;
+		std::tr1::unordered_map<std::string,uint32_t> _info_md5_dict;
+#else
 		std::map<uint32_t,Json::Value> _info_dict;
-		pthread_rwlock_t _info_dict_lock;
 		std::map<std::string,uint32_t> _info_md5_dict;
+#endif
+		pthread_rwlock_t _info_dict_lock;
 		pthread_rwlock_t _info_md5_dict_lock;
 		//json
 		Json::Reader json_reader;
