@@ -6,14 +6,18 @@
 extern cppjieba::Jieba g_jieba;
 
 #define DEFAULT_SCORE (0.0f)
-#define DEFAULT_NEED_SHRINK (1024)
+#define DEFAULT_DEL_NEED_SHRINK (1024)
+#define DEFAULT_ADD_NEED_SHRINK (1024)
 #define MAX_GETLINE_BUFF (1024*1024)
 
-float policy_jisuan_score(std::string &query,std::vector<std::string> & term_list,Json::Value & one_info)
+float policy_jisuan_score(std::string &query,std::vector<std::string> & term_list,Json::Value & query_json,Json::Value & one_info,int search_mode)
 {
 	float ret = DEFAULT_SCORE;
-	if (one_info.empty() || one_info["title"].isNull() ) {return ret;}
-	ret = query.size() * (float)1.0 / one_info["title"].asString().size();
+	if (one_info.empty() || 
+			one_info["show_info"].isNull () ||
+			one_info["show_info"]["title"].isNull() ) {return ret;}
+
+	ret = query.size() * (float)1.0 / one_info["show_info"]["title"].asString().size();
 	ret = (ret >= 1.0f) ? 1.0f : ret;
 	return ret;
 }
@@ -43,6 +47,58 @@ class sort_myclass {
                 return score >= m.score;
         }
 };
+
+void merge_sort_2way(std::vector<uint32_t> & in_way1,std::vector<uint32_t> & in_way2,std::vector<uint32_t> & out_way)
+{
+        out_way.clear();
+	for (int i = 0,j =0;;)
+	{
+		if (i >= in_way1.size() && j >= in_way2.size())
+		{
+			break;
+		}
+		else if (i >= in_way1.size())
+		{//push in_way2
+			for (;j<in_way2.size();j++) 
+			{
+				if (out_way.size() <= 0 || in_way2[j] != out_way.back())
+				{out_way.push_back(in_way2[j]);}
+			}
+			break;
+		}
+		else if (j >= in_way2.size())
+		{//push in_way1
+			for (;i<in_way1.size();i++) 
+			{
+				if (out_way.size() <= 0 || in_way1[i] != out_way.back())
+				{out_way.push_back(in_way1[i]);}
+			}
+			break;
+		}
+
+		if (in_way1[i] < in_way2[j])
+		{
+			if (out_way.size() <= 0 ||
+					in_way1[i] != out_way.back())
+			{
+				out_way.push_back(in_way1[i]);
+			}
+			i++;
+		}
+		else
+		{
+			if (out_way.size() <= 0 ||
+					in_way2[j] != out_way.back())
+			{
+				out_way.push_back(in_way2[j]);
+			}
+			j++;
+		}
+
+	}
+
+}
+
 
 bool Search_Engine::add(std::vector<std::string> & term_list,Json::Value & one_info)
 {
@@ -134,7 +190,7 @@ bool Search_Engine::del(std::vector<std::string> & term_list,Json::Value & one_i
 
 			//check if need shrink
 			index_hash_value i_hash_value = _index_core.find_index(term_list[i]);
-			if (i_hash_value.del_data_num >= DEFAULT_NEED_SHRINK) 
+			if (i_hash_value.del_data_num >= DEFAULT_DEL_NEED_SHRINK) 
 			{
 				_index_core.shrink_index(term_list[i]);
 			}
@@ -145,12 +201,14 @@ bool Search_Engine::del(std::vector<std::string> & term_list,Json::Value & one_i
 
 bool Search_Engine::search(std::vector<std::string> & in_term_list,
 		std::string & in_query,
+		Json::Value & query_json,
 		std::vector<Json::Value> &out_vec,
-		int in_start_id,int in_ret_num,int in_max_ret_num)
+		int in_start_id,int in_ret_num,int in_max_ret_num,int search_mode)
 {
 	//check
 	if (in_term_list.size() <= 0 ||
 			in_query.size() <= 0 ||
+			query_json.empty() ||
 			in_start_id < 0 ||
 			in_ret_num <= 0 ||
 			in_max_ret_num <= 0)
@@ -159,26 +217,29 @@ bool Search_Engine::search(std::vector<std::string> & in_term_list,
 	//select a term which has min index numbers
 	int term_pos = 0;
 	int min_index_numbers = 0;
-	for (int i = 0;i < in_term_list.size(); i++)
+	if (search_mode == and_mode)
 	{
-		index_hash_value i_hash_value = _index_core.find_index(in_term_list[i]);
-
-		if (i_hash_value.sum_node_num <= 0) 
-		{//this term not exist index
-			return true;
-		}
-
-		if (i == 0)
-		{//init
-			term_pos = i;
-			min_index_numbers = i_hash_value.use_data_num;
-		}
-		else
+		for (int i = 0;i < in_term_list.size(); i++)
 		{
-			if (i_hash_value.use_data_num < min_index_numbers)
-			{
+			index_hash_value i_hash_value = _index_core.find_index(in_term_list[i]);
+
+			if (i_hash_value.sum_node_num <= 0) 
+			{//this term not exist index
+				return true;
+			}
+
+			if (i == 0)
+			{//init
 				term_pos = i;
 				min_index_numbers = i_hash_value.use_data_num;
+			}
+			else
+			{
+				if (i_hash_value.use_data_num < min_index_numbers)
+				{
+					term_pos = i;
+					min_index_numbers = i_hash_value.use_data_num;
+				}
 			}
 		}
 	}
@@ -190,18 +251,39 @@ bool Search_Engine::search(std::vector<std::string> & in_term_list,
 
 	_index_core.all_query_index(in_term_list[term_pos],query_in_it);
 
-	for (int i = 0;i < in_term_list.size(); i++)
+	if (search_mode == and_mode)
 	{
-		if (i == term_pos) {continue;}
-		_index_core.cross_query_index(in_term_list[i],query_in_it,query_out_it);
+		for (int i = 0;i < in_term_list.size(); i++)
+		{
+			if (i == term_pos) {continue;}
+			_index_core.cross_query_index(in_term_list[i],query_in_it,query_out_it);
 
-		std::vector<uint32_t> & tmp_it = query_in_it;
-		query_in_it = query_out_it;
-		query_out_it = tmp_it;
-		query_out_it.clear();
-//		query_in = query_out;        // ignore this step to reduce time 
-//		query_out.clear();
+			std::vector<uint32_t> & tmp_it = query_in_it;
+			query_in_it = query_out_it;
+			query_out_it = tmp_it;
+			query_out_it.clear();
+		}
 	}
+	else
+	{
+		for (int i = 0;i < in_term_list.size(); i++)
+		{
+			std::vector<uint32_t>  tmp_vec;
+			if (i == term_pos) {continue;}
+
+			_index_core.all_query_index(in_term_list[i],tmp_vec);
+			merge_sort_2way(query_in_it,tmp_vec,query_out_it);
+
+			std::vector<uint32_t> & tmp_it = query_in_it;
+			query_in_it = query_out_it;
+			query_out_it = tmp_it;
+			query_out_it.clear();
+
+		}
+
+	}
+
+
 	//check in_start_id and in_ret_num
 	if (in_start_id >= query_in_it.size())
 	{return false;}
@@ -223,7 +305,7 @@ bool Search_Engine::search(std::vector<std::string> & in_term_list,
 #endif
 			if (it != _info_dict.end())
 			{
-				float score = policy_jisuan_score(in_query,in_term_list,it->second["show_info"]);
+				float score = policy_jisuan_score(in_query,in_term_list,query_json,it->second,search_mode);
 				sort_myclass my(query_in_it[i], score);
 				vect_score.push_back(my);
 			}
@@ -277,11 +359,11 @@ bool Search_Engine::dump_to_file()
 #ifdef _USE_HASH_
 			for (std::tr1::unordered_map<uint32_t,Json::Value>::iterator it = _info_dict.begin(); it != _info_dict.end(); ++it)
 #else
-			for (std::map<uint32_t,Json::Value>::iterator it = _info_dict.begin(); it != _info_dict.end(); ++it)
+				for (std::map<uint32_t,Json::Value>::iterator it = _info_dict.begin(); it != _info_dict.end(); ++it)
 #endif
-			{
-				os << json_writer.write(it->second);  
-			}
+				{
+					os << json_writer.write(it->second);  
+				}
 		}
 		os.close();  
 		return true;
@@ -357,6 +439,6 @@ bool Search_Engine::load_from_file()
 		else
 		{continue;}
 	}
-		
+
 	return true;
 }

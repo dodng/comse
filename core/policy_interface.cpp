@@ -142,17 +142,21 @@ int policy_entity::get_out_json()
 	{
 		int start_id = 0;
 		int ret_num = 20;
+		int max_ret_num = 40;
+		int search_mode = 0;
 		std::vector<Json::Value> out_vec;
 
 		//parse start_id and ret_num
 		if (!json_in["cmd_info"]["start_id"].isNull()) {start_id = json_in["cmd_info"]["start_id"].asInt();}
 		if (!json_in["cmd_info"]["ret_num"].isNull()) {ret_num = json_in["cmd_info"]["ret_num"].asInt();}
+		if (!json_in["cmd_info"]["max_ret_num"].isNull()) {max_ret_num = json_in["cmd_info"]["max_ret_num"].asInt();}
+		if (!json_in["cmd_info"]["search_mode"].isNull()) {search_mode = json_in["cmd_info"]["search_mode"].asInt();}
 
 		if (!is_term_list_in)
 		{//get term_list
 			policy_cut_query(g_jieba,query,term_list);
 		}
-		if (g_search_engine.search(term_list,query,out_vec,start_id,ret_num))
+		if (g_search_engine.search(term_list,query,json_in,out_vec,start_id,ret_num,max_ret_num,search_mode))
 		{
 			//return true
 			ret = 0;

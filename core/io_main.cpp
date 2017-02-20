@@ -20,8 +20,6 @@
 //////////////base structure///////////////////////////
 /////
 
-#define PROCESS_THREAD 3
-#define UPDATE_PROCESS_THREAD 1
 #define FD_CLOSEONEXEC(x) do { \
 	if (fcntl(x, F_SETFD, 1) == -1) \
 	perror("fcntl(F_SETFD) in FD_CLOSEONEXEC"); \
@@ -195,7 +193,7 @@ void RecvData(int fd, short int events, void *arg)
 	} 
 
 	// clear buff
-	memset(buff,0,buff_len);
+//	memset(buff,0,buff_len);
 	// receive data
 	len = recv(fd,buff, buff_len, 0);
 	event_del(p_ev);
@@ -435,6 +433,10 @@ int main (int argc, char **argv)
 	for (int i = 0 ; i < PROCESS_THREAD;i++)
 	{
 		pthread_join(ptocess_thread[i],0);
+	}
+	for (int i = 0 ; i < UPDATE_PROCESS_THREAD;i++)
+	{
+		pthread_join(update_ptocess_thread[i],0);
 	}
 	return (0);
 }

@@ -18,8 +18,14 @@
 
 /////
 
-float policy_jisuan_score(std::string &query,std::vector<std::string> & term_list,Json::Value & one_info);
+float policy_jisuan_score(std::string &query,std::vector<std::string> & term_list,Json::Value & query_json,Json::Value & one_info);
 void policy_cut_query(cppjieba::Jieba &jieba,std::string & query,std::vector<std::string> &term_list);
+
+enum search_mode
+{
+    and_mode = 0,
+    or_mode = 1
+};
 
 /////
 
@@ -52,8 +58,9 @@ class Search_Engine{
 		bool del(std::vector<std::string> & term_list,Json::Value & one_info);
 		bool search(std::vector<std::string> & in_term_list,
 				std::string & in_query,
+				Json::Value & query_json,
 				std::vector<Json::Value> &out_vec,
-				int in_start_id = 0,int in_ret_num = 20,int in_max_ret_num = 40);
+				int in_start_id = 0,int in_ret_num = 20,int in_max_ret_num = 40,int search_mode = and_mode);
 		bool dump_to_file();
 		bool load_from_file();
 	private:
