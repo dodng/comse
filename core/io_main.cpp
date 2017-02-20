@@ -39,7 +39,8 @@ struct timeval tv_send_timeout = {0};
 /////////////////////////////////////////////////////////
 //struct timeval tv; 
 struct event update_listen_ev;
-pthread_t update_ptocess_thread[UPDATE_PROCESS_THREAD] = {0};
+//+1 use to handle accept thread 
+pthread_t update_ptocess_thread[UPDATE_PROCESS_THREAD + 1] = {0};
 /*notification mechanism*/
 int update_notify_fd[UPDATE_PROCESS_THREAD][2] = {0};
 int update_how_many_client = 0;
@@ -49,6 +50,9 @@ struct sig_ev_arg
 	int notify_fd;
 	void *ptr;
 };
+
+struct sig_ev_arg notify_arg[PROCESS_THREAD] = {0};
+struct sig_ev_arg update_notify_arg[UPDATE_PROCESS_THREAD] = {0};
 
 class interface_data
 {
@@ -85,9 +89,6 @@ class interface_data
 		http_entity http;
 		policy_entity policy;
 };
-
-struct sig_ev_arg notify_arg[PROCESS_THREAD] = {0};
-struct sig_ev_arg update_notify_arg[UPDATE_PROCESS_THREAD] = {0};
 
 struct interface_data * it_pool_get()
 {
@@ -371,16 +372,23 @@ static void *ProcessThread(void *arg)
 	pthread_exit(NULL);
 }
 
+static void *UpdateThreadHandleAccept(void *arg)
+{
+	struct event_base *base = event_init();
+	short update_port = UPDATE_PORT;
+	InitUpdateListenSocket(base, update_port); 
+	event_base_dispatch(base);
+	pthread_exit(NULL);
+
+}
 
 ////////
 
 int main (int argc, char **argv)
 {
-	int socket;
 	/* Initalize the event library */
 	struct event_base *base = event_init();
 	short port = SEARCH_PORT;
-	short update_port = UPDATE_PORT;
 	//init timeout
 	tv_recv_timeout.tv_sec = 3;
 	tv_recv_timeout.tv_usec = 0;
@@ -426,15 +434,24 @@ int main (int argc, char **argv)
 			return -1;
 		}
 	}
+	//create update thread to hanlde accept
+	for (int i = UPDATE_PROCESS_THREAD;i < UPDATE_PROCESS_THREAD + 1 ;i++)
+	{
+		int err = pthread_create(&update_ptocess_thread[i],0,UpdateThreadHandleAccept,0);
+		if (err != 0)
+		{
+			printf("can't create UpdateThreadHandleAccept:%s\n",strerror(err));
+			return -1;
+		}
+	}
 	//use signal tell thread com a new client fd	
 	InitListenSocket(base, port); 
-	InitUpdateListenSocket(base, update_port); 
 	event_base_dispatch(base);
 	for (int i = 0 ; i < PROCESS_THREAD;i++)
 	{
 		pthread_join(ptocess_thread[i],0);
 	}
-	for (int i = 0 ; i < UPDATE_PROCESS_THREAD;i++)
+	for (int i = 0 ; i < UPDATE_PROCESS_THREAD + 1;i++)
 	{
 		pthread_join(update_ptocess_thread[i],0);
 	}
