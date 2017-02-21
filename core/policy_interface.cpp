@@ -107,9 +107,16 @@ int policy_entity::get_out_json()
 		if (!is_term_list_in)
 		{//get term_list
 			policy_cut_query(g_jieba,query,term_list);
+			//add term in json_in
+			Json::Value term_list_json;
+			for (int i = 0;i < term_list.size();i++)
+			{term_list_json.append(term_list[i]);}
+
+			json_in["cmd_info"]["term4se"] = term_list_json;
 		}
+
 		if (g_search_engine.add(term_list,json_in))
-//		if (g_search_engine.add(term_list,json_in["show_info"]))
+			//		if (g_search_engine.add(term_list,json_in["show_info"]))
 		{
 			//return true
 			ret = 0;
@@ -155,7 +162,14 @@ int policy_entity::get_out_json()
 		if (!is_term_list_in)
 		{//get term_list
 			policy_cut_query(g_jieba,query,term_list);
+			//add term in json_in
+			Json::Value term_list_json;
+			for (int i = 0;i < term_list.size();i++)
+			{term_list_json.append(term_list[i]);}
+
+			json_in["cmd_info"]["term4se"] = term_list_json;
 		}
+		
 		if (g_search_engine.search(term_list,query,json_in,out_vec,start_id,ret_num,max_ret_num,search_mode))
 		{
 			//return true
@@ -190,7 +204,9 @@ int policy_entity::get_out_json()
 		ret = 500;
 	}
 
-
+//load info
+	json_out["cmd_info"] = json_in["cmd_info"];
+	json_out["cmd_info"] = json_in["cmd_info"];
 	json_out["ret_code"] = ret;
 	return ret;
 }

@@ -7,7 +7,8 @@ extern cppjieba::Jieba g_jieba;
 
 #define DEFAULT_SCORE (0.0f)
 #define DEFAULT_DEL_NEED_SHRINK (1024)
-#define DEFAULT_ADD_NEED_SHRINK (1024)
+#define DEFAULT_ADD_NEED_SHRINK_AVG (1024)
+#define DEFAULT_ADD_NEED_SHRINK_NODE (128)
 #define MAX_GETLINE_BUFF (1024*1024)
 
 float policy_jisuan_score(std::string &query,std::vector<std::string> & term_list,Json::Value & query_json,Json::Value & one_info,int search_mode)
@@ -141,6 +142,14 @@ bool Search_Engine::add(std::vector<std::string> & term_list,Json::Value & one_i
 		{
 			if( _index_core.insert_index(term_list[i],index_num) != true)
 			{ret = false;}
+
+			//check if need shrink
+			index_hash_value i_hash_value = _index_core.find_index(term_list[i]);
+			if (i_hash_value.sum_node_num >= DEFAULT_ADD_NEED_SHRINK_NODE &&
+				(i_hash_value.use_data_num / i_hash_value.sum_node_num) < DEFAULT_ADD_NEED_SHRINK_AVG) 
+			{
+				_index_core.shrink_index(term_list[i]);
+			}
 		}
 	}
 	return ret;
@@ -424,6 +433,12 @@ bool Search_Engine::load_from_file()
 			if (!is_term_list_in)
 			{//get term_list
 				policy_cut_query(g_jieba,query,term_list);
+				//add term in json_in
+				Json::Value term_list_json;
+				for (int i = 0;i < term_list.size();i++)
+				{term_list_json.append(term_list[i]);}
+
+				tmp_json["cmd_info"]["term4se"] = term_list_json;
 			}
 
 			if (add(term_list,tmp_json))
