@@ -287,10 +287,10 @@ void AcceptUpdateConn(int fd, short int events, void *arg)
 	send(update_notify_fd[(++update_how_many_client) % UPDATE_PROCESS_THREAD][0],&nfd,sizeof(nfd), 0);
 }
 
-void InitListenSocket(struct event_base *base, short port) 
+void InitListenSocket(struct event_base *base,char *ip, short port) 
 {
 	struct event * p_listen_ev = &listen_ev;
-	if (0 == p_listen_ev) return ;
+	if (0 == p_listen_ev || 0 == ip) return ;
 	int listenFd = socket(AF_INET, SOCK_STREAM, 0); 
 	int ret = 0;
 	fcntl(listenFd, F_SETFL, O_NONBLOCK); // set non-blocking 
@@ -299,17 +299,18 @@ void InitListenSocket(struct event_base *base, short port)
 	sockaddr_in sin; 
 	bzero(&sin, sizeof(sin)); 
 	sin.sin_family = AF_INET; 
-	sin.sin_addr.s_addr = INADDR_ANY; 
+//	sin.sin_addr.s_addr = INADDR_ANY; 
+	sin.sin_addr.s_addr = inet_addr(ip);
 	sin.sin_port = htons(port); 
 	bind(listenFd, (const sockaddr*)&sin, sizeof(sin)); 
 	ret = listen(listenFd, LISTEN_PENDING_QUEUE_LENGTH); 
 	printf("server listen fd=%d port=%d retrun:%d errno:%d\n", listenFd,port,ret,errno);
 }
 
-void InitUpdateListenSocket(struct event_base *base, short port) 
+void InitUpdateListenSocket(struct event_base *base, char *ip, short port) 
 {
 	struct event * p_listen_ev = &update_listen_ev;
-	if (0 == p_listen_ev) return ;
+	if (0 == p_listen_ev || 0 == ip) return ;
 	int listenFd = socket(AF_INET, SOCK_STREAM, 0); 
 	int ret = 0;
 	fcntl(listenFd, F_SETFL, O_NONBLOCK); // set non-blocking 
@@ -318,7 +319,7 @@ void InitUpdateListenSocket(struct event_base *base, short port)
 	sockaddr_in sin; 
 	bzero(&sin, sizeof(sin)); 
 	sin.sin_family = AF_INET; 
-	sin.sin_addr.s_addr = INADDR_ANY; 
+	sin.sin_addr.s_addr = inet_addr(ip);
 	sin.sin_port = htons(port); 
 	bind(listenFd, (const sockaddr*)&sin, sizeof(sin)); 
 	ret = listen(listenFd, LISTEN_PENDING_QUEUE_LENGTH); 
@@ -376,7 +377,8 @@ static void *UpdateThreadHandleAccept(void *arg)
 {
 	struct event_base *base = event_init();
 	short update_port = UPDATE_PORT;
-	InitUpdateListenSocket(base, update_port); 
+	char * update_ip = UPDATE_IP;
+	InitUpdateListenSocket(base, update_ip, update_port); 
 	event_base_dispatch(base);
 	pthread_exit(NULL);
 
@@ -389,6 +391,7 @@ int main (int argc, char **argv)
 	/* Initalize the event library */
 	struct event_base *base = event_init();
 	short port = SEARCH_PORT;
+	char *ip = SEARCH_IP;
 	//init timeout
 	tv_recv_timeout.tv_sec = 3;
 	tv_recv_timeout.tv_usec = 0;
@@ -445,7 +448,7 @@ int main (int argc, char **argv)
 		}
 	}
 	//use signal tell thread com a new client fd	
-	InitListenSocket(base, port); 
+	InitListenSocket(base, ip, port); 
 	event_base_dispatch(base);
 	for (int i = 0 ; i < PROCESS_THREAD;i++)
 	{

@@ -33,6 +33,8 @@
 #define BUFF_SIZE (1024 * 4)
 #define SEARCH_PORT 8807
 #define UPDATE_PORT 8907
+#define SEARCH_IP ((char *)"0.0.0.0")
+#define UPDATE_IP ((char *)"0.0.0.0")
 #define LISTEN_PENDING_QUEUE_LENGTH (-1)
 
 enum status_code

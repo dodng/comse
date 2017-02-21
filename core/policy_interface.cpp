@@ -11,8 +11,8 @@ const char* const USER_DICT_PATH = "./cppjieba/dict/user.dict.utf8";
 const char* const IDF_PATH = "./cppjieba/dict/idf.utf8";
 const char* const STOP_WORD_PATH = "./cppjieba/dict/stop_words.utf8";
 
-char* DUMP_FILE_PATH = "./index/dump.json.file";
-char* LOAD_FILE_PATH = "./index/load.json.file";
+char* DUMP_FILE_PATH = (char *)"./index/dump.json.file";
+char* LOAD_FILE_PATH = (char *)"./index/load.json.file";
 
 cppjieba::Jieba g_jieba(DICT_PATH,
 		HMM_PATH,
