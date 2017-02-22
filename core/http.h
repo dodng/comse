@@ -56,7 +56,7 @@ class http_entity{
 		}
 		void parse_header(char *p_str);
 		void parse_body(char *p_str);
-		std::string print_all();
+//		std::string print_all();
 		int parse_done(char *p_str);
 		bool parse_over()
 		{

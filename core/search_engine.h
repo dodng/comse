@@ -27,11 +27,19 @@ enum search_mode
     or_mode = 1
 };
 
+#define INDEX_ONE_NODE_NUM (512)
+#define INDEX_TERM_LOCK_NUM (128)
+#define DEFAULT_SCORE (0.0f)
+#define DEFAULT_DEL_NEED_SHRINK (1024)
+#define DEFAULT_ADD_NEED_SHRINK_AVG ((INDEX_ONE_NODE_NUM)*2)
+#define DEFAULT_ADD_NEED_SHRINK_NODE (128)
+#define MAX_GETLINE_BUFF (1024*1024)
+
 /////
 
 class Search_Engine{
 	public:
-		Search_Engine(char *p_file_dump_file = 0,char * p_file_load_file = 0)
+		Search_Engine(char *p_file_dump_file = 0,char * p_file_load_file = 0):_index_core(INDEX_ONE_NODE_NUM,INDEX_TERM_LOCK_NUM)
 		{
 			//lock init
 			pthread_rwlock_init(&_info_dict_lock,NULL);	

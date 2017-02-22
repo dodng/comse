@@ -17,6 +17,8 @@
 #include "io_config.h"
 #include "http.h"
 #include "policy_interface.h"
+#include "easy_log.h"
+
 //////////////base structure///////////////////////////
 /////
 
@@ -53,6 +55,9 @@ struct sig_ev_arg
 
 struct sig_ev_arg notify_arg[PROCESS_THREAD] = {0};
 struct sig_ev_arg update_notify_arg[UPDATE_PROCESS_THREAD] = {0};
+
+easy_log g_log("./log/comse.log",50000,8);
+/////////////////////////////////////////////////////////
 
 class interface_data
 {
@@ -92,14 +97,14 @@ class interface_data
 
 struct interface_data * it_pool_get()
 {
-	printf("it_pool_get\n");
+//	printf("it_pool_get\n");
 	return new interface_data();
 }
 void it_pool_put(struct interface_data *p_it)
 {
 	if (p_it)
 		delete p_it;
-	printf("it_pool_put\n");
+//	printf("it_pool_put\n");
 }
 
 void inline reg_add_event(struct event *p_eve,int fd,int event_type,event_cb_func p_func,void *p_arg,
@@ -137,11 +142,13 @@ void SendData(int fd, short int events, void *arg)
 	char *buff = (char *)&(p_it->send_buff);
 	int buff_len = p_it->send_buff_len;
 	int len;
-	//char buff[512] = {0};
+	char log_buff[BUFF_SIZE] = {0};
 
 	if (events == EV_TIMEOUT)
 	{
-		printf("send timeout fd=[%d] error[%d]\n", fd, errno);
+//		printf("send timeout fd=[%d] error[%d]\n", fd, errno);
+		snprintf(log_buff,sizeof(log_buff),"send timeout fd=[%d] error[%d]", fd, errno);
+		g_log.write_record(log_buff);
 		goto GC;
 	} 
 	
@@ -150,7 +157,9 @@ void SendData(int fd, short int events, void *arg)
 
 	if(len >= 0)
 	{
-		printf("Thread[%x]\tClient[%d]:Send=%s\n",(int)pthread_self(),fd, buff);
+//		printf("Thread[%x]\tClient[%d]:Send=%s\n",(int)pthread_self(),fd, buff);
+		snprintf(log_buff,sizeof(log_buff),"Thread[%x]\tClient[%d]:Send=%s",(int)pthread_self(),fd, buff);
+		g_log.write_record(log_buff);
 		//send success
 		p_it->status = status_send;
 		//reset
@@ -163,7 +172,9 @@ void SendData(int fd, short int events, void *arg)
 	}
 	else
 	{
-		printf("talk over[fd=%d] error[%d]:%s\n", fd, errno, strerror(errno));
+//		printf("talk over[fd=%d] error[%d]:%s\n", fd, errno, strerror(errno));
+		snprintf(log_buff,sizeof(log_buff),"talk over[fd=%d] error[%d]:%s", fd, errno, strerror(errno));
+		g_log.write_record(log_buff);
 		goto GC;
 	}
 	return;
@@ -183,13 +194,17 @@ void RecvData(int fd, short int events, void *arg)
 	char *buff = (char *)&(p_it->recv_buff) + p_it->now_recv_len;
 	int buff_len = p_it->recv_buff_len - p_it->now_recv_len;
 	int len;
+	char log_buff[BUFF_SIZE] = {0};
+	
 	//timeout
 	if (events == EV_TIMEOUT)
 	{
 		close(p_ev->ev_fd);
 		event_del(p_ev);
 		it_pool_put(p_it);
-		printf("recv timeout fd=[%d] error[%d]\n", fd, errno);
+//		printf("recv timeout fd=[%d] error[%d]\n", fd, errno);
+		snprintf(log_buff,sizeof(log_buff),"recv timeout fd=[%d] error[%d]", fd, errno);
+		g_log.write_record(log_buff);
 		return;
 	} 
 
@@ -201,16 +216,14 @@ void RecvData(int fd, short int events, void *arg)
 
 	if(len > 0)
 	{
-		printf("Thread[%x]\tClient[%d]:Recv=%s\n",(int)pthread_self(),fd, buff);
 		//read success
 		p_it->status = status_recv;
 		//regist send event
 		p_it->now_recv_len += len;
-//		p_it->http.parse_header(buff);
-//		p_it->http.parse_body(buff);
-		int parse_ret = p_it->http.parse_done(buff);
-		printf("%s",(p_it->http.print_all()).c_str());
-		printf("http parse_done ret:[%d]\n",parse_ret);
+//		int parse_ret = p_it->http.parse_done(buff);
+		int parse_ret = p_it->http.parse_done((char *)&(p_it->recv_buff));
+		snprintf(log_buff,sizeof(log_buff),"Thread[%x]\tClient[%d]:Recv=[%s]:Parse=[%d]",(int)pthread_self(),fd, buff, parse_ret);
+		g_log.write_record(log_buff);
 
 		if (parse_ret < 0 )
 		{goto GC;}
@@ -218,25 +231,23 @@ void RecvData(int fd, short int events, void *arg)
 		{reg_add_event(p_ev,p_it->sd,EV_READ,RecvData,p_it,base,&tv_recv_timeout);}
 		else
 		{
-#if 0
-		p_it->policy.set_http(&p_it->http);
-		p_it->policy.parse_in_json();
-		p_it->policy.get_out_json();
-		p_it->policy.cook_senddata(p_it->send_buff,p_it->send_buff_len,p_it->now_send_len);
-#endif
 		p_it->policy.do_one_action(&p_it->http,p_it->send_buff,p_it->send_buff_len,p_it->now_send_len);
 
-		printf("%s",(p_it->policy.print_all()).c_str());
-		
 		reg_add_event(p_ev,p_it->sd,EV_WRITE,SendData,p_it,base,&tv_send_timeout);}
 
 	}
 	else
 	{
 		if (len == 0)
-			printf("[fd=%d] , closed gracefully.\n", fd);
+		{
+			snprintf(log_buff,sizeof(log_buff),"[fd=%d] , closed gracefully.", fd);
+			g_log.write_record(log_buff);
+		}
 		else
-			printf("recv[fd=%d] error[%d]:%s\n", fd, errno, strerror(errno));
+		{	
+			snprintf(log_buff,sizeof(log_buff),"recv[fd=%d] error[%d]:%s", fd, errno, strerror(errno));
+			g_log.write_record(log_buff);
+		}
 		goto GC;
 	}
 	return;
@@ -255,13 +266,15 @@ void AcceptConn(int fd, short int events, void *arg)
 	event_add(p_ev, NULL);
 	socklen_t len = sizeof(struct sockaddr_in);
 	int nfd, i;
+	char log_buff[128] = {0};
 	// accept 
 	if((nfd = accept(fd, (struct sockaddr*)&sin, &len)) <= 0)
 	{
 		if(errno != EAGAIN && errno != EINTR)
 		{
 		}
-		printf("%s[%d]\t%s: accept return:%d, errno:%d\n", __FILE__,__LINE__,__func__,nfd,errno);
+		snprintf(log_buff,sizeof(log_buff),"%s[%d]\t%s: accept return:%d, errno:%d", __FILE__,__LINE__,__func__,nfd,errno);
+                g_log.write_record(log_buff);
 		return;
 	}
 	send(notify_fd[(++how_many_client) % PROCESS_THREAD][0],&nfd,sizeof(nfd), 0);
@@ -275,13 +288,15 @@ void AcceptUpdateConn(int fd, short int events, void *arg)
 	event_add(p_ev, NULL);
 	socklen_t len = sizeof(struct sockaddr_in);
 	int nfd, i;
+	char log_buff[128] = {0};
 	// accept 
 	if((nfd = accept(fd, (struct sockaddr*)&sin, &len)) <= 0)
 	{
 		if(errno != EAGAIN && errno != EINTR)
 		{
 		}
-		printf("%s[%d]\t%s: accept return:%d, errno:%d\n", __FILE__,__LINE__,__func__,nfd,errno);
+		snprintf(log_buff,sizeof(log_buff),"%s[%d]\t%s: accept return:%d, errno:%d", __FILE__,__LINE__,__func__,nfd,errno);
+                g_log.write_record(log_buff);
 		return;
 	}
 	send(update_notify_fd[(++update_how_many_client) % UPDATE_PROCESS_THREAD][0],&nfd,sizeof(nfd), 0);
@@ -293,18 +308,21 @@ void InitListenSocket(struct event_base *base,char *ip, short port)
 	if (0 == p_listen_ev || 0 == ip) return ;
 	int listenFd = socket(AF_INET, SOCK_STREAM, 0); 
 	int ret = 0;
+	char log_buff[128] = {0};
 	fcntl(listenFd, F_SETFL, O_NONBLOCK); // set non-blocking 
 	reg_add_event(p_listen_ev,listenFd,EV_READ,AcceptConn,p_listen_ev,base,NULL);
 	// bind & listen 
 	sockaddr_in sin; 
 	bzero(&sin, sizeof(sin)); 
 	sin.sin_family = AF_INET; 
-//	sin.sin_addr.s_addr = INADDR_ANY; 
+	//	sin.sin_addr.s_addr = INADDR_ANY; 
 	sin.sin_addr.s_addr = inet_addr(ip);
 	sin.sin_port = htons(port); 
 	bind(listenFd, (const sockaddr*)&sin, sizeof(sin)); 
 	ret = listen(listenFd, LISTEN_PENDING_QUEUE_LENGTH); 
-	printf("server listen fd=%d port=%d retrun:%d errno:%d\n", listenFd,port,ret,errno);
+//	printf("server listen fd=%d port=%d retrun:%d errno:%d\n", listenFd,port,ret,errno);
+	snprintf(log_buff,sizeof(log_buff),"server listen fd=%d port=%d retrun:%d errno:%d", listenFd,port,ret,errno);
+	g_log.write_record(log_buff);
 }
 
 void InitUpdateListenSocket(struct event_base *base, char *ip, short port) 
@@ -313,6 +331,7 @@ void InitUpdateListenSocket(struct event_base *base, char *ip, short port)
 	if (0 == p_listen_ev || 0 == ip) return ;
 	int listenFd = socket(AF_INET, SOCK_STREAM, 0); 
 	int ret = 0;
+	char log_buff[128] = {0};
 	fcntl(listenFd, F_SETFL, O_NONBLOCK); // set non-blocking 
 	reg_add_event(p_listen_ev,listenFd,EV_READ,AcceptUpdateConn,p_listen_ev,base,NULL);
 	// bind & listen 
@@ -323,7 +342,9 @@ void InitUpdateListenSocket(struct event_base *base, char *ip, short port)
 	sin.sin_port = htons(port); 
 	bind(listenFd, (const sockaddr*)&sin, sizeof(sin)); 
 	ret = listen(listenFd, LISTEN_PENDING_QUEUE_LENGTH); 
-	printf("server listen update fd=%d port=%d retrun:%d errno:%d\n", listenFd,port,ret,errno);
+//	printf("server listen update fd=%d port=%d retrun:%d errno:%d\n", listenFd,port,ret,errno);
+	snprintf(log_buff,sizeof(log_buff),"server listen update fd=%d port=%d retrun:%d errno:%d", listenFd,port,ret,errno);
+	g_log.write_record(log_buff);
 }
 
 ///////////process thread/////////////////
@@ -334,6 +355,7 @@ evsignal_cb(int fd, short what, void *arg)
 	struct event *p_ev = (struct event *)arg;
 	static char msg[sizeof(int)];
 	ssize_t n;
+	char log_buff[128] = {0};
 
 	n = recv(fd,msg, sizeof(msg), 0);
 	if (n == sizeof(msg))
@@ -345,18 +367,24 @@ evsignal_cb(int fd, short what, void *arg)
 		int iret = 0;
 		if((iret = fcntl(nfd, F_SETFL, O_NONBLOCK)) < 0)
 		{   
-			printf("%s: fcntl nonblocking failed:%d\n", __func__, iret);
+			snprintf(log_buff,sizeof(log_buff),"%s: fcntl nonblocking failed:%d", __func__, iret);
+			g_log.write_record(log_buff);
+//			printf("%s: fcntl nonblocking failed:%d\n", __func__, iret);
 			return;
 		}   
 		// add a read event for receive data
 		p_read_it->sd = nfd;
 		reg_add_event(&(p_read_it->ev),nfd,EV_READ,RecvData,p_read_it,p_ev->ev_base,&tv_recv_timeout);
-		printf("process thread read new client fd[%d]\n",nfd);
+//		printf("process thread read new client fd[%d]\n",nfd);
+		snprintf(log_buff,sizeof(log_buff),"process thread read new client fd[%d]",nfd);
+		g_log.write_record(log_buff);
 
 	}
 	else 
 	{
-		printf("%s[%d]\t%s:  return:%d, errno:%d", __FILE__,__LINE__,__func__,n,errno);
+//		printf("%s[%d]\t%s:  return:%d, errno:%d", __FILE__,__LINE__,__func__,n,errno);
+		snprintf(log_buff,sizeof(log_buff),"%s[%d]\t%s:  return:%d, errno:%d", __FILE__,__LINE__,__func__,n,errno);
+		g_log.write_record(log_buff);
 
 	}
 
@@ -392,6 +420,7 @@ int main (int argc, char **argv)
 	struct event_base *base = event_init();
 	short port = SEARCH_PORT;
 	char *ip = SEARCH_IP;
+	char log_buff[128] = {0};
 	//init timeout
 	tv_recv_timeout.tv_sec = 3;
 	tv_recv_timeout.tv_usec = 0;
@@ -403,7 +432,10 @@ int main (int argc, char **argv)
 	for(int i = 0 ; i < PROCESS_THREAD;i++)
 	{
 		if (evutil_socketpair(AF_UNIX, SOCK_STREAM, 0,notify_fd[i]) == -1) 
-		{perror("socketpair error");
+		{
+			//perror("socketpair error");
+			snprintf(log_buff,sizeof(log_buff),"%s[%d]\t%s:  socketpair error", __FILE__,__LINE__,__func__);
+			g_log.write_record(log_buff);
 			return -1;
 		}
 
@@ -414,7 +446,9 @@ int main (int argc, char **argv)
 		int err = pthread_create(&ptocess_thread[i],0,ProcessThread,&notify_arg[i]);
 		if (err != 0)
 		{
-			printf("can't create ProcessThread thread:%s\n",strerror(err));
+//			printf("can't create ProcessThread thread:%s\n",strerror(err));
+			snprintf(log_buff,sizeof(log_buff),"can't create ProcessThread thread:%s",strerror(err));
+			g_log.write_record(log_buff);
 			return -1;
 		}
 	}
@@ -422,7 +456,10 @@ int main (int argc, char **argv)
 	for(int i = 0 ; i < UPDATE_PROCESS_THREAD;i++)
 	{
 		if (evutil_socketpair(AF_UNIX, SOCK_STREAM, 0,update_notify_fd[i]) == -1) 
-		{perror("socketpair error");
+		{
+			//perror("socketpair error");
+			snprintf(log_buff,sizeof(log_buff),"%s[%d]\t%s:  socketpair error", __FILE__,__LINE__,__func__);
+			g_log.write_record(log_buff);
 			return -1;
 		}
 
@@ -433,7 +470,9 @@ int main (int argc, char **argv)
 		int err = pthread_create(&update_ptocess_thread[i],0,ProcessThread,&update_notify_arg[i]);
 		if (err != 0)
 		{
-			printf("can't create Update ProcessThread thread:%s\n",strerror(err));
+		//	printf("can't create Update ProcessThread thread:%s\n",strerror(err));
+			snprintf(log_buff,sizeof(log_buff),"can't create Update ProcessThread thread:%s",strerror(err));
+			g_log.write_record(log_buff);
 			return -1;
 		}
 	}
@@ -443,7 +482,9 @@ int main (int argc, char **argv)
 		int err = pthread_create(&update_ptocess_thread[i],0,UpdateThreadHandleAccept,0);
 		if (err != 0)
 		{
-			printf("can't create UpdateThreadHandleAccept:%s\n",strerror(err));
+//			printf("can't create UpdateThreadHandleAccept:%s\n",strerror(err));
+			snprintf(log_buff,sizeof(log_buff),"can't create UpdateThreadHandleAccept:%s",strerror(err));
+			g_log.write_record(log_buff);
 			return -1;
 		}
 	}

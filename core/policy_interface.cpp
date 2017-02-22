@@ -229,6 +229,7 @@ int policy_entity::cook_senddata(char *send_buff_p,int buff_len,int &send_len)
 
 }
 
+#if 0
 std::string policy_entity::print_all()
 {
 	std::string rst;
@@ -239,7 +240,7 @@ std::string policy_entity::print_all()
 	return rst;
 
 }
-
+#endif
 
 int policy_entity::do_one_action(http_entity *it_http_p,char *send_buff_p,int buff_len,int &send_len)
 {

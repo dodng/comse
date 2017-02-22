@@ -5,12 +5,6 @@
 
 extern cppjieba::Jieba g_jieba;
 
-#define DEFAULT_SCORE (0.0f)
-#define DEFAULT_DEL_NEED_SHRINK (1024)
-#define DEFAULT_ADD_NEED_SHRINK_AVG (1024)
-#define DEFAULT_ADD_NEED_SHRINK_NODE (128)
-#define MAX_GETLINE_BUFF (1024*1024)
-
 float policy_jisuan_score(std::string &query,std::vector<std::string> & term_list,Json::Value & query_json,Json::Value & one_info,int search_mode)
 {
 	float ret = DEFAULT_SCORE;

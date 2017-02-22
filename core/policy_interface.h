@@ -17,7 +17,7 @@ class policy_entity{
 		int parse_in_json();
 		int get_out_json();
 		int cook_senddata(char *send_buff_p,int buff_len,int &send_len);
-		std::string print_all();
+//		std::string print_all();
 		void reset()
 		{
 			it_http = 0;

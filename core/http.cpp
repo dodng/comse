@@ -160,7 +160,7 @@ void http_entity::parse_body(char *p_str)
 		}
 	}
 }
-
+#if 0
 std::string http_entity::print_all()
 {
 	std::string rst;
@@ -174,7 +174,7 @@ std::string http_entity::print_all()
 		rst += "[" + it->first + "]=>[" + it->second.c_str() + "]\n";
 	return rst;
 }
-
+#endif
 int http_entity::parse_done(char *p_str)
 {//return -1 error, 0 continue receive ,1 parse done
 //do parse
