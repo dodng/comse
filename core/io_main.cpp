@@ -14,32 +14,21 @@
 #include <event.h>
 #include <pthread.h>
 #include "evutil.h"
-#include "io_config.h"
-#include "http.h"
-#include "policy_interface.h"
 #include "easy_log.h"
+#include "io_config.h"
 
 //////////////base structure///////////////////////////
 /////
 
-#define FD_CLOSEONEXEC(x) do { \
-	if (fcntl(x, F_SETFD, 1) == -1) \
-	perror("fcntl(F_SETFD) in FD_CLOSEONEXEC"); \
-} while (0)
-
 //struct timeval tv; 
 struct event listen_ev;
-pthread_t ptocess_thread[PROCESS_THREAD] = {0};
+pthread_t ptocess_thread[MAX_PROCESS_THREAD] = {0};
 /*notification mechanism*/
-int notify_fd[PROCESS_THREAD][2] = {0};
+int notify_fd[MAX_PROCESS_THREAD][2] = {0};
 int how_many_client = 0;
-//timeout
-struct timeval tv_con_timeout = {0};
-struct timeval tv_recv_timeout = {0};
-struct timeval tv_send_timeout = {0};
 
 /////////////////////////////////////////////////////////
-//struct timeval tv; 
+
 struct event update_listen_ev;
 //+1 use to handle accept thread 
 pthread_t update_ptocess_thread[UPDATE_PROCESS_THREAD + 1] = {0};
@@ -47,64 +36,42 @@ pthread_t update_ptocess_thread[UPDATE_PROCESS_THREAD + 1] = {0};
 int update_notify_fd[UPDATE_PROCESS_THREAD][2] = {0};
 int update_how_many_client = 0;
 
-struct sig_ev_arg 
-{
-	int notify_fd;
-	void *ptr;
-};
-
-struct sig_ev_arg notify_arg[PROCESS_THREAD] = {0};
+struct sig_ev_arg notify_arg[MAX_PROCESS_THREAD] = {0};
 struct sig_ev_arg update_notify_arg[UPDATE_PROCESS_THREAD] = {0};
 
 easy_log g_log("./log/comse.log",50000,8);
 /////////////////////////////////////////////////////////
 
-class interface_data
-{
-	public:
-		interface_data()
-		{
-			recv_buff_len = BUFF_SIZE;
-			send_buff_len = BUFF_SIZE;
-			now_send_len = 0;
-			now_recv_len = 0;
+int g_recv_buff = (1024 * 4);
+int g_send_buff = (1024 * 4);
 
-			status = status_init;
-//			bs = NULL;
-			sd = -1;
-		}
-		~interface_data(){;}
-		void reset()
-		{
-			now_send_len = 0;
-			now_recv_len = 0;
-			policy.reset();
-			http.reset();
-		}
-		//data
-		char recv_buff[BUFF_SIZE];
-		char send_buff[BUFF_SIZE];
-		int recv_buff_len;
-		int send_buff_len;
-		int now_recv_len;
-		int now_send_len;
-		struct event ev;
-		int status;
-		int sd;
-		http_entity http;
-		policy_entity policy;
-};
+short g_search_port = 8807;
+short g_update_port = 8907;
+char g_search_ip[64] = "0.0.0.0";
+char g_update_ip[64] = "0.0.0.0";
+int g_listen_backlog = -1;
+
+//timeout
+struct timeval tv_con_timeout = {0};
+struct timeval tv_recv_timeout = {3,0};
+struct timeval tv_send_timeout = {0,10000};
+
+//search thread num
+int g_search_thread_num = 3;
+
+/////////////////////////////////////////////////////////////
 
 struct interface_data * it_pool_get()
 {
-//	printf("it_pool_get\n");
-	return new interface_data();
+	//	printf("it_pool_get\n");
+	return new interface_data(g_recv_buff,g_send_buff);
 }
+
 void it_pool_put(struct interface_data *p_it)
 {
 	if (p_it)
 		delete p_it;
-//	printf("it_pool_put\n");
+	//	printf("it_pool_put\n");
 }
 
 void inline reg_add_event(struct event *p_eve,int fd,int event_type,event_cb_func p_func,void *p_arg,
@@ -121,6 +88,7 @@ void inline reg_add_event(struct event *p_eve,int fd,int event_type,event_cb_fun
 }
 //////////////single thread/////////////////
 //
+#if 0
 int get_sock_error(int fd)
 {
 	int error;
@@ -131,6 +99,7 @@ int get_sock_error(int fd)
 	return error;
 
 }
+#endif
 //////////////
 void SendData(int fd, short int events, void *arg)
 {
@@ -139,25 +108,25 @@ void SendData(int fd, short int events, void *arg)
 	struct interface_data *p_it = (struct interface_data *)arg;
 	struct event *p_ev = &(p_it->ev);
 	struct event_base *base = p_ev->ev_base;
-	char *buff = (char *)&(p_it->send_buff);
+	char *buff = (char *)(p_it->send_buff);
 	int buff_len = p_it->send_buff_len;
 	int len;
 	char log_buff[BUFF_SIZE] = {0};
 
 	if (events == EV_TIMEOUT)
 	{
-//		printf("send timeout fd=[%d] error[%d]\n", fd, errno);
+		//		printf("send timeout fd=[%d] error[%d]\n", fd, errno);
 		snprintf(log_buff,sizeof(log_buff),"send timeout fd=[%d] error[%d]", fd, errno);
 		g_log.write_record(log_buff);
 		goto GC;
 	} 
-	
+
 	len = send(fd, buff, p_it->now_send_len, 0);
 	event_del(p_ev);
 
 	if(len >= 0)
 	{
-//		printf("Thread[%x]\tClient[%d]:Send=%s\n",(int)pthread_self(),fd, buff);
+		//		printf("Thread[%x]\tClient[%d]:Send=%s\n",(int)pthread_self(),fd, buff);
 		snprintf(log_buff,sizeof(log_buff),"Thread[%x]\tClient[%d]:Send=%s",(int)pthread_self(),fd, buff);
 		g_log.write_record(log_buff);
 		//send success
@@ -168,11 +137,11 @@ void SendData(int fd, short int events, void *arg)
 		reg_add_event(p_ev,p_it->sd,EV_READ,RecvData,p_it,base,&tv_recv_timeout);
 		//flush stdout
 		fflush(stdout);
-//		goto GC;
+		//		goto GC;
 	}
 	else
 	{
-//		printf("talk over[fd=%d] error[%d]:%s\n", fd, errno, strerror(errno));
+		//		printf("talk over[fd=%d] error[%d]:%s\n", fd, errno, strerror(errno));
 		snprintf(log_buff,sizeof(log_buff),"talk over[fd=%d] error[%d]:%s", fd, errno, strerror(errno));
 		g_log.write_record(log_buff);
 		goto GC;
@@ -191,25 +160,25 @@ void RecvData(int fd, short int events, void *arg)
 	struct interface_data *p_it = (struct interface_data *)arg;
 	struct event *p_ev = &(p_it->ev);
 	struct event_base *base = p_ev->ev_base;
-	char *buff = (char *)&(p_it->recv_buff) + p_it->now_recv_len;
+	char *buff = (char *)(p_it->recv_buff) + p_it->now_recv_len;
 	int buff_len = p_it->recv_buff_len - p_it->now_recv_len;
 	int len;
 	char log_buff[BUFF_SIZE] = {0};
-	
+
 	//timeout
 	if (events == EV_TIMEOUT)
 	{
 		close(p_ev->ev_fd);
 		event_del(p_ev);
 		it_pool_put(p_it);
-//		printf("recv timeout fd=[%d] error[%d]\n", fd, errno);
+		//		printf("recv timeout fd=[%d] error[%d]\n", fd, errno);
 		snprintf(log_buff,sizeof(log_buff),"recv timeout fd=[%d] error[%d]", fd, errno);
 		g_log.write_record(log_buff);
 		return;
 	} 
 
 	// clear buff
-//	memset(buff,0,buff_len);
+	//	memset(buff,0,buff_len);
 	// receive data
 	len = recv(fd,buff, buff_len, 0);
 	event_del(p_ev);
@@ -220,8 +189,8 @@ void RecvData(int fd, short int events, void *arg)
 		p_it->status = status_recv;
 		//regist send event
 		p_it->now_recv_len += len;
-//		int parse_ret = p_it->http.parse_done(buff);
-		int parse_ret = p_it->http.parse_done((char *)&(p_it->recv_buff));
+		//		int parse_ret = p_it->http.parse_done(buff);
+		int parse_ret = p_it->http.parse_done((char *)(p_it->recv_buff));
 		snprintf(log_buff,sizeof(log_buff),"Thread[%x]\tClient[%d]:Recv=[%s]:Parse=[%d]",(int)pthread_self(),fd, buff, parse_ret);
 		g_log.write_record(log_buff);
 
@@ -231,9 +200,9 @@ void RecvData(int fd, short int events, void *arg)
 		{reg_add_event(p_ev,p_it->sd,EV_READ,RecvData,p_it,base,&tv_recv_timeout);}
 		else
 		{
-		p_it->policy.do_one_action(&p_it->http,p_it->send_buff,p_it->send_buff_len,p_it->now_send_len);
+			p_it->policy.do_one_action(&p_it->http,p_it->send_buff,p_it->send_buff_len,p_it->now_send_len);
 
-		reg_add_event(p_ev,p_it->sd,EV_WRITE,SendData,p_it,base,&tv_send_timeout);}
+			reg_add_event(p_ev,p_it->sd,EV_WRITE,SendData,p_it,base,&tv_send_timeout);}
 
 	}
 	else
@@ -274,10 +243,10 @@ void AcceptConn(int fd, short int events, void *arg)
 		{
 		}
 		snprintf(log_buff,sizeof(log_buff),"%s[%d]\t%s: accept return:%d, errno:%d", __FILE__,__LINE__,__func__,nfd,errno);
-                g_log.write_record(log_buff);
+		g_log.write_record(log_buff);
 		return;
 	}
-	send(notify_fd[(++how_many_client) % PROCESS_THREAD][0],&nfd,sizeof(nfd), 0);
+	send(notify_fd[(++how_many_client) % g_search_thread_num][0],&nfd,sizeof(nfd), 0);
 }
 
 void AcceptUpdateConn(int fd, short int events, void *arg)
@@ -296,7 +265,7 @@ void AcceptUpdateConn(int fd, short int events, void *arg)
 		{
 		}
 		snprintf(log_buff,sizeof(log_buff),"%s[%d]\t%s: accept return:%d, errno:%d", __FILE__,__LINE__,__func__,nfd,errno);
-                g_log.write_record(log_buff);
+		g_log.write_record(log_buff);
 		return;
 	}
 	send(update_notify_fd[(++update_how_many_client) % UPDATE_PROCESS_THREAD][0],&nfd,sizeof(nfd), 0);
@@ -319,8 +288,8 @@ void InitListenSocket(struct event_base *base,char *ip, short port)
 	sin.sin_addr.s_addr = inet_addr(ip);
 	sin.sin_port = htons(port); 
 	bind(listenFd, (const sockaddr*)&sin, sizeof(sin)); 
-	ret = listen(listenFd, LISTEN_PENDING_QUEUE_LENGTH); 
-//	printf("server listen fd=%d port=%d retrun:%d errno:%d\n", listenFd,port,ret,errno);
+	ret = listen(listenFd, g_listen_backlog); 
+	//	printf("server listen fd=%d port=%d retrun:%d errno:%d\n", listenFd,port,ret,errno);
 	snprintf(log_buff,sizeof(log_buff),"server listen fd=%d port=%d retrun:%d errno:%d", listenFd,port,ret,errno);
 	g_log.write_record(log_buff);
 }
@@ -341,8 +310,8 @@ void InitUpdateListenSocket(struct event_base *base, char *ip, short port)
 	sin.sin_addr.s_addr = inet_addr(ip);
 	sin.sin_port = htons(port); 
 	bind(listenFd, (const sockaddr*)&sin, sizeof(sin)); 
-	ret = listen(listenFd, LISTEN_PENDING_QUEUE_LENGTH); 
-//	printf("server listen update fd=%d port=%d retrun:%d errno:%d\n", listenFd,port,ret,errno);
+	ret = listen(listenFd, g_listen_backlog); 
+	//	printf("server listen update fd=%d port=%d retrun:%d errno:%d\n", listenFd,port,ret,errno);
 	snprintf(log_buff,sizeof(log_buff),"server listen update fd=%d port=%d retrun:%d errno:%d", listenFd,port,ret,errno);
 	g_log.write_record(log_buff);
 }
@@ -369,20 +338,20 @@ evsignal_cb(int fd, short what, void *arg)
 		{   
 			snprintf(log_buff,sizeof(log_buff),"%s: fcntl nonblocking failed:%d", __func__, iret);
 			g_log.write_record(log_buff);
-//			printf("%s: fcntl nonblocking failed:%d\n", __func__, iret);
+			//			printf("%s: fcntl nonblocking failed:%d\n", __func__, iret);
 			return;
 		}   
 		// add a read event for receive data
 		p_read_it->sd = nfd;
 		reg_add_event(&(p_read_it->ev),nfd,EV_READ,RecvData,p_read_it,p_ev->ev_base,&tv_recv_timeout);
-//		printf("process thread read new client fd[%d]\n",nfd);
+		//		printf("process thread read new client fd[%d]\n",nfd);
 		snprintf(log_buff,sizeof(log_buff),"process thread read new client fd[%d]",nfd);
 		g_log.write_record(log_buff);
 
 	}
 	else 
 	{
-//		printf("%s[%d]\t%s:  return:%d, errno:%d", __FILE__,__LINE__,__func__,n,errno);
+		//		printf("%s[%d]\t%s:  return:%d, errno:%d", __FILE__,__LINE__,__func__,n,errno);
 		snprintf(log_buff,sizeof(log_buff),"%s[%d]\t%s:  return:%d, errno:%d", __FILE__,__LINE__,__func__,n,errno);
 		g_log.write_record(log_buff);
 
@@ -404,8 +373,8 @@ static void *ProcessThread(void *arg)
 static void *UpdateThreadHandleAccept(void *arg)
 {
 	struct event_base *base = event_init();
-	short update_port = UPDATE_PORT;
-	char * update_ip = UPDATE_IP;
+	short update_port = g_update_port;
+	char * update_ip = g_update_ip;
 	InitUpdateListenSocket(base, update_ip, update_port); 
 	event_base_dispatch(base);
 	pthread_exit(NULL);
@@ -418,18 +387,11 @@ int main (int argc, char **argv)
 {
 	/* Initalize the event library */
 	struct event_base *base = event_init();
-	short port = SEARCH_PORT;
-	char *ip = SEARCH_IP;
+	short port = g_search_port;
+	char *ip = g_search_ip;
 	char log_buff[128] = {0};
-	//init timeout
-	tv_recv_timeout.tv_sec = 3;
-	tv_recv_timeout.tv_usec = 0;
-	tv_send_timeout.tv_sec = 0;
-	tv_send_timeout.tv_usec = 10000;
-	tv_con_timeout.tv_sec = 0;
-	tv_con_timeout.tv_usec = 100000;
 	//create threads
-	for(int i = 0 ; i < PROCESS_THREAD;i++)
+	for(int i = 0 ; i < g_search_thread_num;i++)
 	{
 		if (evutil_socketpair(AF_UNIX, SOCK_STREAM, 0,notify_fd[i]) == -1) 
 		{
@@ -446,7 +408,7 @@ int main (int argc, char **argv)
 		int err = pthread_create(&ptocess_thread[i],0,ProcessThread,&notify_arg[i]);
 		if (err != 0)
 		{
-//			printf("can't create ProcessThread thread:%s\n",strerror(err));
+			//			printf("can't create ProcessThread thread:%s\n",strerror(err));
 			snprintf(log_buff,sizeof(log_buff),"can't create ProcessThread thread:%s",strerror(err));
 			g_log.write_record(log_buff);
 			return -1;
@@ -470,7 +432,7 @@ int main (int argc, char **argv)
 		int err = pthread_create(&update_ptocess_thread[i],0,ProcessThread,&update_notify_arg[i]);
 		if (err != 0)
 		{
-		//	printf("can't create Update ProcessThread thread:%s\n",strerror(err));
+			//	printf("can't create Update ProcessThread thread:%s\n",strerror(err));
 			snprintf(log_buff,sizeof(log_buff),"can't create Update ProcessThread thread:%s",strerror(err));
 			g_log.write_record(log_buff);
 			return -1;
@@ -482,7 +444,7 @@ int main (int argc, char **argv)
 		int err = pthread_create(&update_ptocess_thread[i],0,UpdateThreadHandleAccept,0);
 		if (err != 0)
 		{
-//			printf("can't create UpdateThreadHandleAccept:%s\n",strerror(err));
+			//			printf("can't create UpdateThreadHandleAccept:%s\n",strerror(err));
 			snprintf(log_buff,sizeof(log_buff),"can't create UpdateThreadHandleAccept:%s",strerror(err));
 			g_log.write_record(log_buff);
 			return -1;
@@ -491,7 +453,7 @@ int main (int argc, char **argv)
 	//use signal tell thread com a new client fd	
 	InitListenSocket(base, ip, port); 
 	event_base_dispatch(base);
-	for (int i = 0 ; i < PROCESS_THREAD;i++)
+	for (int i = 0 ; i < g_search_thread_num;i++)
 	{
 		pthread_join(ptocess_thread[i],0);
 	}
