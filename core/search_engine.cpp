@@ -3,16 +3,50 @@
 #include <algorithm>
 #include <iostream>
 
+
 extern cppjieba::Jieba g_jieba;
 
 float policy_jisuan_score(std::string &query,std::vector<std::string> & term_list,Json::Value & query_json,Json::Value & one_info,int search_mode)
 {
 	float ret = DEFAULT_SCORE;
 	if (one_info.empty() || 
-			one_info["show_info"].isNull () ||
-			one_info["show_info"]["title"].isNull() ) {return ret;}
+			one_info["cmd_info"].isNull () ||
+			one_info["cmd_info"]["title4se"].isNull() ) {return ret;}
 
-	ret = query.size() * (float)1.0 / one_info["show_info"]["title"].asString().size();
+	if (search_mode == or_mode)
+	{
+		int or_terms_length = 0;
+
+		if (!one_info["cmd_info"]["term4se"].isNull()
+				&& one_info["cmd_info"]["term4se"].isArray()
+				&& one_info["cmd_info"]["term4se"].size() > 0)
+		{
+#ifdef _USE_HASH_
+			std::tr1::unordered_set<std::string> term_hash;
+			std::tr1::unordered_set<std::string>::iterator term_hash_it;
+#else
+			std::set<std::string> term_hash;
+			std::set<std::string>::iterator term_hash_it;
+#endif
+
+			for (unsigned int i = 0; i < one_info["cmd_info"]["term4se"].size(); i++)
+			{
+				term_hash.insert(one_info["cmd_info"]["term4se"][i].asString());
+			}
+
+			for (int i = 0 ; i < term_list.size();i++)
+			{
+				term_hash_it = term_hash.find(term_list[i]);
+				if (term_hash_it != term_hash.end()) {or_terms_length += term_list[i].size();}
+			}
+		}
+
+		ret = or_terms_length * (float)1.0 / one_info["cmd_info"]["title4se"].asString().size();
+	}
+	else
+	{
+		ret = (float)1.0 / one_info["cmd_info"]["title4se"].asString().size();
+	}
 	ret = (ret >= 1.0f) ? 1.0f : ret;
 	return ret;
 }
@@ -33,19 +67,19 @@ void policy_cut_query(cppjieba::Jieba &jieba,std::string & query,std::vector<std
 ////////////////////////////////////////////////////////////////////
 
 class sort_myclass {
-        public:
-        sort_myclass(uint32_t a, float b):pos(a), score(b){}
-        uint32_t pos;
-        float score;
+	public:
+		sort_myclass(uint32_t a, float b):pos(a), score(b){}
+		uint32_t pos;
+		float score;
 
-        bool operator < (const sort_myclass &m)const {
-                return score >= m.score;
-        }
+		bool operator < (const sort_myclass &m)const {
+			return score >= m.score;
+		}
 };
 
 void merge_sort_2way(std::vector<uint32_t> & in_way1,std::vector<uint32_t> & in_way2,std::vector<uint32_t> & out_way)
 {
-        out_way.clear();
+	out_way.clear();
 	for (int i = 0,j =0;;)
 	{
 		if (i >= in_way1.size() && j >= in_way2.size())
@@ -140,7 +174,7 @@ bool Search_Engine::add(std::vector<std::string> & term_list,Json::Value & one_i
 			//check if need shrink
 			index_hash_value i_hash_value = _index_core.find_index(term_list[i]);
 			if (i_hash_value.sum_node_num >= DEFAULT_ADD_NEED_SHRINK_NODE &&
-				(i_hash_value.use_data_num / i_hash_value.sum_node_num) < DEFAULT_ADD_NEED_SHRINK_AVG) 
+					(i_hash_value.use_data_num / i_hash_value.sum_node_num) < DEFAULT_ADD_NEED_SHRINK_AVG) 
 			{
 				_index_core.shrink_index(term_list[i]);
 			}

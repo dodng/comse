@@ -5,8 +5,10 @@
 
 #ifdef _USE_HASH_
 #include <tr1/unordered_map>
+#include <tr1/unordered_set>
 #else
 #include <map>
+#include <set>
 #endif
 
 #include "json/json.h"
