@@ -1,7 +1,7 @@
 #include "search_engine.h"
 #include "limonp/Md5.hpp"
 #include <algorithm>
-#include <iostream>
+#include <fstream> 
 
 
 extern cppjieba::Jieba g_jieba;

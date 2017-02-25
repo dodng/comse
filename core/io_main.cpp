@@ -16,6 +16,9 @@
 #include "evutil.h"
 #include "easy_log.h"
 #include "io_config.h"
+#include <fstream> 
+#include "json/json.h"
+#include <string>
 
 //////////////base structure///////////////////////////
 /////
@@ -382,14 +385,118 @@ static void *UpdateThreadHandleAccept(void *arg)
 }
 
 ////////
+//succ return 0,other return < 0
+
+int parse_config(char *config_path)
+{
+	int ret = 0;
+	if (0 == config_path) {return -1;}
+	Json::Reader reader;  
+	Json::Value root;
+	std::ifstream is;
+	is.open(config_path);
+
+	if (!is.is_open())
+	{
+		ret = -2;
+	}
+
+	if (reader.parse(is, root))  
+	{
+		if (!root["recv_buff"].isNull())
+		{
+			int value = root["recv_buff"].asInt();
+			if (value > 50 && value < (1024*1024*100))
+			{g_recv_buff = value;}
+		} 
+		if (!root["send_buff"].isNull())
+		{
+			int value = root["send_buff"].asInt();
+			if (value > 50 && value < (1024*1024*100))
+			{g_send_buff = value;}
+		} 
+		if (!root["search_port"].isNull())
+		{
+			int value = root["search_port"].asInt();
+			if (value > 0 && value < (65536))
+			{g_search_port = (short)value;}
+		} 
+		if (!root["update_port"].isNull())
+		{
+			int value = root["update_port"].asInt();
+			if (value > 0 && value < (65536))
+			{g_update_port = (short)value;}
+		} 
+		if (!root["search_ip"].isNull())
+		{
+			std::string value = root["search_ip"].asString();
+			memcpy(g_search_ip,value.c_str(),value.size() > 32 ? 32: value.size() );
+		} 
+		if (!root["update_ip"].isNull())
+		{
+			std::string value = root["update_ip"].asString();
+			memcpy(g_update_ip,value.c_str(),value.size() > 32 ? 32: value.size() );
+		} 
+		if (!root["listen_backlog"].isNull())
+		{
+			int value = root["listen_backlog"].asInt();
+			if (value > -2)
+			{g_listen_backlog = value;}
+		} 
+		if (!root["tv_recv_timeout_sec"].isNull())
+		{
+			int value = root["tv_recv_timeout_sec"].asInt();
+			if (value >= 0)
+			{tv_recv_timeout.tv_sec = value;}
+		} 
+		if (!root["tv_recv_timeout_usec"].isNull())
+		{
+			int value = root["tv_recv_timeout_usec"].asInt();
+			if (value >= 0)
+			{tv_recv_timeout.tv_usec = value;}
+		} 
+		if (!root["tv_send_timeout_sec"].isNull())
+		{
+			int value = root["tv_send_timeout_sec"].asInt();
+			if (value >= 0)
+			{tv_send_timeout.tv_sec = value;}
+		} 
+		if (!root["tv_send_timeout_usec"].isNull())
+		{
+			int value = root["tv_send_timeout_usec"].asInt();
+			if (value >= 0)
+			{tv_send_timeout.tv_usec = value;}
+		} 
+		if (!root["search_thread_num"].isNull())
+		{
+			int value = root["search_thread_num"].asInt();
+			if (value >= 1 && value < MAX_PROCESS_THREAD)
+			{g_search_thread_num = value;}
+		} 
+	}
+	else
+	{
+		ret = -3;
+	}
+
+	is.close();
+	return ret;	
+}
 
 int main (int argc, char **argv)
 {
+	char log_buff[128] = {0};
+	if (argc == 2)
+	{
+		int ret = parse_config(argv[1]);
+		snprintf(log_buff,sizeof(log_buff),"parse_config[%s] return:%d",argv[1],ret);
+		g_log.write_record(log_buff);
+
+	}
 	/* Initalize the event library */
 	struct event_base *base = event_init();
 	short port = g_search_port;
 	char *ip = g_search_ip;
-	char log_buff[128] = {0};
 	//create threads
 	for(int i = 0 ; i < g_search_thread_num;i++)
 	{
