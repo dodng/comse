@@ -2,6 +2,10 @@
 #include <string.h>
 //#include <stdio.h> //dodng-test
 
+
+//uint32_t _shrink_buffer[MAX_INDEX_NUM] = {0};
+//int _shrink_buffer_now = 0;
+
 void Index_Core::all_query_index(std::string index_hash_key,std::vector<uint32_t> &query_out)
 {
 	if (index_hash_key.size() <= 0) {return;}
@@ -30,6 +34,11 @@ void Index_Core::all_query_index(std::string index_hash_key,std::vector<uint32_t
 					{
 						query_out.push_back(p_node->data_p[j]);
 						skip_value = p_node->data_p[j];
+						//truncate return,avoid too many search and overflow the stack size
+						if (query_out.size() > MAX_RECALL_NUM)
+						{
+							return;
+						}
 					}
 				}
 
@@ -81,6 +90,11 @@ void Index_Core::cross_query_index(std::string index_hash_key,std::vector<uint32
 						if(binary_search(p_node->data_p,p_node->use_data_num,query_in[k]) >= 0)
 						{
 							query_out.push_back(query_in[k]);
+							//truncate return,avoid too many search and overflow the stack size
+							if (query_out.size() > MAX_RECALL_NUM)
+							{
+								return;
+							}
 						}
 						k++;
 					}
@@ -137,6 +151,10 @@ bool Index_Core::insert_index(std::string index_hash_key,uint32_t insert_in_valu
 				{
 					//					p_node_last = &(it->second.head);
 					p_node_last = it->second.head_p;
+				}
+				else if (it->second.use_data_num > MAX_INDEX_NUM)
+				{
+					return false;
 				}
 				else
 				{
@@ -384,7 +402,8 @@ bool Index_Core::shrink_index(std::string index_hash_key,bool adapt_mem)
 
 		if (index_hash_key.size() <= 0) {return false;}
 
-		std::vector<uint32_t> query_out;
+//		AutoRelease_HeapVec heap_vec;
+//		std::vector<uint32_t> &query_out = *(heap_vec.m_p_vec);
 
 		//1.all_query get all datas(skip same and continuation numbers)
 		{
@@ -400,7 +419,11 @@ bool Index_Core::shrink_index(std::string index_hash_key,bool adapt_mem)
 				{//enter tiny lock space
 					uint32_t skip_value = 0;
 					//push 0 into first 
-					query_out.push_back(0);
+					//query_out.push_back(0);
+					_shrink_buffer_now = 0;
+					if (_shrink_buffer_now < MAX_INDEX_NUM)
+					{_shrink_buffer[_shrink_buffer_now++] = 0;}
+
 					AUTO_LOCK auto_lock_2(&index_inner_lock_p[it->second.my_pos % _inner_lock_num],false);
 					index_node *p_node = it->second.head_p;
 					for (int i = 0;
@@ -411,7 +434,9 @@ bool Index_Core::shrink_index(std::string index_hash_key,bool adapt_mem)
 						{//loop data
 							if (p_node->data_p[j] > skip_value)
 							{
-								query_out.push_back(p_node->data_p[j]);
+								//query_out.push_back(p_node->data_p[j]);
+								if (_shrink_buffer_now < MAX_INDEX_NUM)
+								{_shrink_buffer[_shrink_buffer_now++] = p_node->data_p[j];}
 								skip_value = p_node->data_p[j];
 							}
 						}
@@ -424,9 +449,9 @@ bool Index_Core::shrink_index(std::string index_hash_key,bool adapt_mem)
 			}
 		}
 
-		if (query_out.size() <= 0 )
+		if (_shrink_buffer_now <= 0 )
 		{return false;}
-		else if (query_out.size() == 1)//notice:pushed 0 into first 
+		else if (_shrink_buffer_now == 1)//notice:pushed 0 into first 
 		{empty_hash_key = true;}
 
 		//2.generate new hash_values
@@ -436,7 +461,7 @@ bool Index_Core::shrink_index(std::string index_hash_key,bool adapt_mem)
 		if (!empty_hash_key)
 		{//init hash value
 
-			uint32_t data_num_here= adapt_mem?get_adapt_mem(query_out.size(),_data_num):_data_num;
+			uint32_t data_num_here = adapt_mem?get_adapt_mem(_shrink_buffer_now,_data_num):_data_num;
 			memset(p_hash_value,0,sizeof(index_hash_value));
 			p_hash_value->my_pos = 0;//notice use old;
 			p_hash_value->del_data_num = 0;
@@ -455,11 +480,11 @@ bool Index_Core::shrink_index(std::string index_hash_key,bool adapt_mem)
 			uint32_t *data_value_p = 0;
 			index_node *p_node_last = p_hash_value->head_p;
 
-			for (int i = 0 ; i <query_out.size(); i++)
+			for (int i = 0 ; i < _shrink_buffer_now; i++)
 			{
 				if ( p_node_last->use_data_num >= data_num_here)
 				{//need malloc one node
-					data_num_here=adapt_mem?get_adapt_mem(query_out.size() - i,_data_num):_data_num;
+					data_num_here=adapt_mem?get_adapt_mem(_shrink_buffer_now - i,_data_num):_data_num;
 					index_node *p_node = new index_node();
 					memset(p_node,0,sizeof(index_node));
 					//					printf("dodng-test 426 new %p\n",p_node);
@@ -484,7 +509,7 @@ bool Index_Core::shrink_index(std::string index_hash_key,bool adapt_mem)
 				p_hash_value->use_data_num++;
 				p_node_last->use_data_num++;
 				data_value_p = &(p_node_last->data_p[p_node_last->use_data_num - 1]);
-				*data_value_p = query_out[i];
+				*data_value_p = _shrink_buffer[i];
 			}
 
 		}
@@ -589,55 +614,55 @@ void Index_Core::clear_all_index()
 #ifdef _USE_HASH_
 			for (std::tr1::unordered_map<std::string,index_hash_value>::iterator it = index_map.begin(); it!=index_map.end(); ++it)
 #else
-			for (std::map<std::string,index_hash_value>::iterator it = index_map.begin(); it!=index_map.end(); ++it)
+				for (std::map<std::string,index_hash_value>::iterator it = index_map.begin(); it!=index_map.end(); ++it)
 #endif
-			{
-				index_hash_value one_hash_value = {0};//init 0
-				one_hash_value = it->second;
+				{
+					index_hash_value one_hash_value = {0};//init 0
+					one_hash_value = it->second;
 
-				//release resource
-				index_node *p_node = one_hash_value.head_p;
-				index_node p_node_mirror = {0};
+					//release resource
+					index_node *p_node = one_hash_value.head_p;
+					index_node p_node_mirror = {0};
 
-				for (int i = 0;
-						i < one_hash_value.sum_node_num && 0 != p_node; 
-						i++,p_node = p_node->next_p)
-				{//loop node
-					//clone p_node for loop
-					p_node_mirror = *p_node;
+					for (int i = 0;
+							i < one_hash_value.sum_node_num && 0 != p_node; 
+							i++,p_node = p_node->next_p)
+					{//loop node
+						//clone p_node for loop
+						p_node_mirror = *p_node;
 
-					//if head node,skip
+						//if head node,skip
 #if 0
-					if (i == 0) 
-					{ 
-						//release head data_p
-						if (0 != p_node->data_p)
-						{
-							//				printf("dodng-test 332 delete[] %p\n",p_node->data_p);
-							delete []p_node->data_p;
+						if (i == 0) 
+						{ 
+							//release head data_p
+							if (0 != p_node->data_p)
+							{
+								//				printf("dodng-test 332 delete[] %p\n",p_node->data_p);
+								delete []p_node->data_p;
+							}
 						}
-					}
-					else
+						else
 #endif
-					{
-						//release myself
-						if (0 != p_node->data_p)
 						{
-							//				printf("dodng-test 340 delete[] %p\n",p_node->data_p);
-							delete []p_node->data_p;
+							//release myself
+							if (0 != p_node->data_p)
+							{
+								//				printf("dodng-test 340 delete[] %p\n",p_node->data_p);
+								delete []p_node->data_p;
+							}
+
+							//			printf("dodng-test 344 delete %p\n",p_node);
+							delete p_node;
+							//use 
+							p_node = &p_node_mirror;
+
 						}
-
-						//			printf("dodng-test 344 delete %p\n",p_node);
-						delete p_node;
-						//use 
-						p_node = &p_node_mirror;
-
 					}
+
+
+
 				}
-
-
-
-			}
 
 		}
 	}

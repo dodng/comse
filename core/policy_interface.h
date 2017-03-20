@@ -1,3 +1,11 @@
+/***************************************************************************
+ * 
+ *	author:dodng
+ *	e-mail:dodng12@163.com
+ * 	2017/3/16
+ *   
+ **************************************************************************/
+
 #ifndef COMSE_POLICY_H_
 #define COMSE_POLICY_H_
 
@@ -30,4 +38,6 @@ class policy_entity{
 		Json::Value json_in;
 		Json::Value json_out;
 };
+
+bool policy_interface_init_once();
 #endif

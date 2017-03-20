@@ -2,52 +2,45 @@
 #include "limonp/Md5.hpp"
 #include <algorithm>
 #include <fstream> 
-
+#include "easy_log.h"
+#include <sys/time.h>
 
 extern cppjieba::Jieba g_jieba;
+extern pthread_mutex_t g_jieba_lock;
+extern easy_log g_log;
 
-float policy_jisuan_score(std::string &query,std::vector<std::string> & term_list,Json::Value & query_json,Json::Value & one_info,int search_mode)
+int policy_compute_score(std::string &query,std::vector<std::string> & term_list,Json::Value & query_json,info_storage & one_info,int search_mode)
 {
-	float ret = DEFAULT_SCORE;
-	if (one_info.empty() || 
-			one_info["cmd_info"].isNull () ||
-			one_info["cmd_info"]["title4se"].isNull() ) {return ret;}
+	int ret = DEFAULT_SCORE;
+	if (one_info.info_json_ori_str.size() <= 0 || 
+			one_info.title4se.size() <= 0 ) {return ret;}
 
 	if (search_mode == or_mode)
 	{
 		int or_terms_length = 0;
+		int or_terms_num = 0;
 
-		if (!one_info["cmd_info"]["term4se"].isNull()
-				&& one_info["cmd_info"]["term4se"].isArray()
-				&& one_info["cmd_info"]["term4se"].size() > 0)
+		if ( one_info.term4se_set.size() > 0)
 		{
-#ifdef _USE_HASH_
-			std::tr1::unordered_set<std::string> term_hash;
-			std::tr1::unordered_set<std::string>::iterator term_hash_it;
-#else
-			std::set<std::string> term_hash;
 			std::set<std::string>::iterator term_hash_it;
-#endif
-
-			for (unsigned int i = 0; i < one_info["cmd_info"]["term4se"].size(); i++)
-			{
-				term_hash.insert(one_info["cmd_info"]["term4se"][i].asString());
-			}
 
 			for (int i = 0 ; i < term_list.size();i++)
 			{
-				term_hash_it = term_hash.find(term_list[i]);
-				if (term_hash_it != term_hash.end()) {or_terms_length += term_list[i].size();}
+				term_hash_it = one_info.term4se_set.find(term_list[i]);
+				if (term_hash_it != one_info.term4se_set.end()) 
+				{
+					or_terms_length += term_list[i].size();
+					or_terms_num++;
+				}
 			}
 		}
 
-		ret = or_terms_length * (float)1.0 / one_info["cmd_info"]["title4se"].asString().size();
+		ret = (or_terms_num * 1000 + or_terms_length);
 	}
 	else
 	{
-		ret = (float)1.0 / one_info["cmd_info"]["title4se"].asString().size();
+		ret = (10000 - one_info.title4se.size());
 	}
-	ret = (ret >= 1.0f) ? 1.0f : ret;
 	return ret;
 }
 
@@ -55,7 +48,11 @@ void policy_cut_query(cppjieba::Jieba &jieba,std::string & query,std::vector<std
 {
 	if (query.size() <= 0) {return;}
 	std::vector<cppjieba::Word> jiebawords;
-	jieba.CutForSearch(query, jiebawords, true);
+	{//enter auto mutex lock
+		AutoLock_Mutex auto_lock0(&g_jieba_lock);
+		jieba.CutForSearch(query, jiebawords, true);
+	}
+
 	//clear
 	term_list.clear();
 	for (int i = 0;i < jiebawords.size();i++)
@@ -64,16 +61,80 @@ void policy_cut_query(cppjieba::Jieba &jieba,std::string & query,std::vector<std
 	}
 }
 
+bool json_2_info(Json::Value & json,std::string & json_show_str,info_storage & info_stg)
+{
+	//check in policy
+	info_stg.title4se = json["cmd_info"]["title4se"].asString();
+	for (int i = 0;i < json["cmd_info"]["term4se"].size();i++)
+	{
+		info_stg.term4se_set.insert(json["cmd_info"]["term4se"][i].asString());
+	}
+	info_stg.info_json_ori_str = json_show_str;
+
+	return true;
+}
+
+std::string str_escape(std::string  str)
+{
+	std::string ret_str;
+	for (int i = 0 ;i < str.size();i++)
+	{
+		if ( str.c_str()[i] == '\r')
+		{
+			ret_str += '\\';
+			ret_str += 'r';
+		}
+		else if (  str.c_str()[i] == '\n')
+		{
+			ret_str += '\\';
+			ret_str += 'n';
+		}
+		else
+		{
+			ret_str += str.c_str()[i];
+		}
+	}
+	return ret_str;
+}
+
+bool info_2_json(info_storage & info_stg, std::string & json_output_str)
+{
+	json_output_str.clear();
+	json_output_str += "{\"cmd_info\":{\"term4se\":[";
+	for (std::set<std::string>::iterator it = info_stg.term4se_set.begin(); it != info_stg.term4se_set.end() ;it++)
+	{
+		if (it == info_stg.term4se_set.begin())
+		{json_output_str += "\"" + str_escape(*it) + "\"";}
+		else
+		{json_output_str += ",\"" + str_escape(*it) + "\"";}
+	}
+	json_output_str += "],\"title4se\":\"";
+	json_output_str += str_escape(info_stg.title4se);
+	json_output_str += "\"},\"cmd_type\":\"add\",\"show_info\":";
+	//delete last \n
+	if (info_stg.info_json_ori_str.size() > 0 
+			&& info_stg.info_json_ori_str.c_str()[info_stg.info_json_ori_str.size()-1] == '\n')
+		json_output_str += info_stg.info_json_ori_str.substr(0,info_stg.info_json_ori_str.size()-1);
+	else
+		json_output_str += info_stg.info_json_ori_str;
+	json_output_str += "}";
+	return true;
+}
+
 ////////////////////////////////////////////////////////////////////
+
+//tools:
 
 class sort_myclass {
 	public:
-		sort_myclass(uint32_t a, float b):pos(a), score(b){}
+		sort_myclass(uint32_t a, int b):pos(a), score(b){}
+		sort_myclass(){}
+		~sort_myclass(){}
 		uint32_t pos;
-		float score;
+		int score;
 
 		bool operator < (const sort_myclass &m)const {
-			return score >= m.score;
+			return score > m.score;
 		}
 };
 
@@ -87,20 +148,32 @@ void merge_sort_2way(std::vector<uint32_t> & in_way1,std::vector<uint32_t> & in_
 			break;
 		}
 		else if (i >= in_way1.size())
-		{//push in_way2
+		{//in_way1 is empty,push in_way2
 			for (;j<in_way2.size();j++) 
 			{
 				if (out_way.size() <= 0 || in_way2[j] != out_way.back())
-				{out_way.push_back(in_way2[j]);}
+				{
+					out_way.push_back(in_way2[j]);
+					if (out_way.size() > MAX_RECALL_NUM) //avoid too many search and overflow stack size
+					{
+						return;
+					}
+				}
 			}
 			break;
 		}
 		else if (j >= in_way2.size())
-		{//push in_way1
+		{//in_way2 is empty,push in_way1
 			for (;i<in_way1.size();i++) 
 			{
 				if (out_way.size() <= 0 || in_way1[i] != out_way.back())
-				{out_way.push_back(in_way1[i]);}
+				{
+					out_way.push_back(in_way1[i]);
+					if (out_way.size() > MAX_RECALL_NUM) //avoid too many search and overflow stack size
+					{
+						return;
+					}
+				}
 			}
 			break;
 		}
@@ -111,6 +184,10 @@ void merge_sort_2way(std::vector<uint32_t> & in_way1,std::vector<uint32_t> & in_
 					in_way1[i] != out_way.back())
 			{
 				out_way.push_back(in_way1[i]);
+				if (out_way.size() > MAX_RECALL_NUM) //avoid too many search and overflow stack size
+				{
+					return;
+				}
 			}
 			i++;
 		}
@@ -120,6 +197,10 @@ void merge_sort_2way(std::vector<uint32_t> & in_way1,std::vector<uint32_t> & in_
 					in_way2[j] != out_way.back())
 			{
 				out_way.push_back(in_way2[j]);
+				if (out_way.size() > MAX_RECALL_NUM) //avoid too many search and overflow stack size
+				{
+					return;
+				}
 			}
 			j++;
 		}
@@ -128,16 +209,24 @@ void merge_sort_2way(std::vector<uint32_t> & in_way1,std::vector<uint32_t> & in_
 
 }
 
+////////////////////////////////////////////////////////////////////
 
 bool Search_Engine::add(std::vector<std::string> & term_list,Json::Value & one_info)
 {
 	bool ret = false;
+	char log_buff[1024] = {0};
 	//check if validate
-	if (term_list.size() <= 0 || one_info.empty()) {return false;}
+	if (term_list.size() <= 0 || one_info.empty()) 
+	{
+		snprintf(log_buff,sizeof(log_buff),"term_list is empty or one_info is empty");
+		g_log.write_record(log_buff);
+		return false;
+	}
 	//jisuan md5
-	std::string json_str = json_writer.write(one_info);
+	std::string json_str = json_writer.write(one_info["show_info"]);
 	std::string md5_str;
 	uint32_t index_num = 0;
+
 	limonp::md5String(json_str.c_str(),md5_str);
 	//add info_md5
 	{// enter lock
@@ -150,6 +239,8 @@ bool Search_Engine::add(std::vector<std::string> & term_list,Json::Value & one_i
 		//check if add
 		if (it != _info_md5_dict.end())
 		{
+			snprintf(log_buff,sizeof(log_buff),"add duplicate data:%s",json_str.c_str());
+			g_log.write_record(log_buff);
 			return true;		
 		}
 		else
@@ -158,25 +249,47 @@ bool Search_Engine::add(std::vector<std::string> & term_list,Json::Value & one_i
 			_info_md5_dict.insert ( std::pair<std::string,uint32_t>(md5_str,index_num) );
 		}
 	}
+	//output log
+	if (index_num % 10000 == 0)
+	{
+		snprintf(log_buff,sizeof(log_buff),"now max_index_num:%d",index_num);
+		g_log.write_record(log_buff);
+	}
+
+	//load info
+	info_storage info_stg;
+	json_2_info(one_info,json_str,info_stg);
+
 	//add info
-	{// enter lock std::map<uint32_t,Json::Value> _info_dict;
+	{// enter lock 
 		AUTO_LOCK auto_lock(&_info_dict_lock,true);
-		_info_dict.insert ( std::pair<uint32_t,Json::Value>(index_num,one_info) );
+		_info_dict.insert ( std::pair<uint32_t,info_storage>(index_num,info_stg) );
 	}
 	//add index
 	{
-		ret = true;
+		ret = false;
 		for (int i = 0 ;i < term_list.size(); i++)
 		{
-			if( _index_core.insert_index(term_list[i],index_num) != true)
-			{ret = false;}
+			if( _index_core.insert_index(term_list[i],index_num))
+			{ret = true;}
 
 			//check if need shrink
 			index_hash_value i_hash_value = _index_core.find_index(term_list[i]);
 			if (i_hash_value.sum_node_num >= DEFAULT_ADD_NEED_SHRINK_NODE &&
 					(i_hash_value.use_data_num / i_hash_value.sum_node_num) < DEFAULT_ADD_NEED_SHRINK_AVG) 
 			{
+				snprintf(log_buff,sizeof(log_buff),"add do shrink index[sum_node:%d] [use_data:%d] [del_data:%d] [term:%s]"
+						,i_hash_value.sum_node_num,i_hash_value.use_data_num,i_hash_value.del_data_num
+						,term_list[i].c_str());
+				g_log.write_record(log_buff);
+
 				_index_core.shrink_index(term_list[i]);
+				i_hash_value = _index_core.find_index(term_list[i]);
+
+				snprintf(log_buff,sizeof(log_buff),"add done shrink index[sum_node:%d] [use_data:%d] [del_data:%d] [term:%s]"
+						,i_hash_value.sum_node_num,i_hash_value.use_data_num,i_hash_value.del_data_num
+						,term_list[i].c_str());
+				g_log.write_record(log_buff);
 			}
 		}
 	}
@@ -190,8 +303,9 @@ bool Search_Engine::del(std::vector<std::string> & term_list,Json::Value & one_i
 	//check if validate
 	if (term_list.size() <= 0 || one_info.empty()) {return false;}
 	//jisuan md5
-	std::string json_str = json_writer.write(one_info);
+	std::string json_str = json_writer.write(one_info["show_info"]);
 	std::string md5_str;
+	char log_buff[1024] = {0};
 	limonp::md5String(json_str.c_str(),md5_str);
 	//add info_md5
 	{// enter lock
@@ -213,23 +327,34 @@ bool Search_Engine::del(std::vector<std::string> & term_list,Json::Value & one_i
 		}
 	}
 	//del info
-	{// enter lock std::map<uint32_t,Json::Value> _info_dict;
+	{// enter lock 
 		AUTO_LOCK auto_lock(&_info_dict_lock,true);
 		_info_dict.erase (index_num);
 	}
 	//del index
 	{
-		ret = true;
+		ret = false;
 		for (int i = 0 ;i < term_list.size(); i++)
 		{
-			if( _index_core.delete_index(term_list[i],index_num) != true)
-			{ret = false;}
+			if( _index_core.delete_index(term_list[i],index_num))
+			{ret = true;}
 
 			//check if need shrink
 			index_hash_value i_hash_value = _index_core.find_index(term_list[i]);
 			if (i_hash_value.del_data_num >= DEFAULT_DEL_NEED_SHRINK) 
 			{
+				snprintf(log_buff,sizeof(log_buff),"del do shrink index[sum_node:%d] [use_data:%d] [del_data:%d] [term:%s]"
+						,i_hash_value.sum_node_num,i_hash_value.use_data_num,i_hash_value.del_data_num
+						,term_list[i].c_str());
+				g_log.write_record(log_buff);
+
 				_index_core.shrink_index(term_list[i]);
+				i_hash_value = _index_core.find_index(term_list[i]);
+
+				snprintf(log_buff,sizeof(log_buff),"del done shrink index[sum_node:%d] [use_data:%d] [del_data:%d] [term:%s]"
+						,i_hash_value.sum_node_num,i_hash_value.use_data_num,i_hash_value.del_data_num
+						,term_list[i].c_str());
+				g_log.write_record(log_buff);
 			}
 		}
 	}
@@ -239,7 +364,9 @@ bool Search_Engine::del(std::vector<std::string> & term_list,Json::Value & one_i
 bool Search_Engine::search(std::vector<std::string> & in_term_list,
 		std::string & in_query,
 		Json::Value & query_json,
-		std::vector<Json::Value> &out_vec,
+		std::vector<std::string> & out_info_vec,
+		std::vector<int> & out_score_vec,
+		int &recall_num,
 		int in_start_id,int in_ret_num,int in_max_ret_num,int search_mode)
 {
 	//check
@@ -248,9 +375,15 @@ bool Search_Engine::search(std::vector<std::string> & in_term_list,
 			query_json.empty() ||
 			in_start_id < 0 ||
 			in_ret_num <= 0 ||
-			in_max_ret_num <= 0)
+			in_max_ret_num <= 0 )
 	{return false;}
 
+	//get time
+	char log_buff[1024] = {0};
+	struct timeval l_time[6] = {0};
+	int l_time_pos = 0;
+
+	gettimeofday(&l_time[l_time_pos++],0);
 	//select a term which has min index numbers
 	int term_pos = 0;
 	int min_index_numbers = 0;
@@ -283,6 +416,9 @@ bool Search_Engine::search(std::vector<std::string> & in_term_list,
 	//get recall index numbers vector
 	std::vector<uint32_t> query_in;
 	std::vector<uint32_t> query_out;
+	query_in.reserve(MAX_RECALL_NUM + 128);
+	query_out.reserve(MAX_RECALL_NUM + 128);
+
 	std::vector<uint32_t> & query_in_it = query_in;
 	std::vector<uint32_t> & query_out_it = query_out;
 
@@ -294,7 +430,7 @@ bool Search_Engine::search(std::vector<std::string> & in_term_list,
 		{
 			if (i == term_pos) {continue;}
 			_index_core.cross_query_index(in_term_list[i],query_in_it,query_out_it);
-
+			//swap query_in and query_out ,and clear query_out to next step use
 			std::vector<uint32_t> & tmp_it = query_in_it;
 			query_in_it = query_out_it;
 			query_out_it = tmp_it;
@@ -310,16 +446,23 @@ bool Search_Engine::search(std::vector<std::string> & in_term_list,
 
 			_index_core.all_query_index(in_term_list[i],tmp_vec);
 			merge_sort_2way(query_in_it,tmp_vec,query_out_it);
-
+			//swap query_in and query_out ,and clear query_out to next step use
 			std::vector<uint32_t> & tmp_it = query_in_it;
 			query_in_it = query_out_it;
 			query_out_it = tmp_it;
 			query_out_it.clear();
 
+			
+			if (query_in_it.size() > MAX_RECALL_NUM) //avoid too many search and overflow stack size
+			{
+				break;
+			}
+
 		}
 
 	}
 
+	gettimeofday(&l_time[l_time_pos++],0);
 
 	//check in_start_id and in_ret_num
 	if (in_start_id >= query_in_it.size())
@@ -327,8 +470,9 @@ bool Search_Engine::search(std::vector<std::string> & in_term_list,
 	if (in_ret_num >= in_max_ret_num)
 	{in_ret_num = in_max_ret_num;}
 
-	//jisuan every index score,and get the need number vector,can use min heap sort
+	//compute every index score,and get the need number vector,can use min heap sort
 	std::vector< sort_myclass > vect_score;
+	vect_score.reserve(MAX_RECALL_NUM + 128);
 
 	{
 		AUTO_LOCK auto_lock(&_info_dict_lock,false);
@@ -336,13 +480,13 @@ bool Search_Engine::search(std::vector<std::string> & in_term_list,
 		for (int i = 0; i < query_in_it.size(); i++)
 		{
 #ifdef _USE_HASH_
-			std::tr1::unordered_map<uint32_t,Json::Value>::iterator it = _info_dict.find(query_in_it[i]);
+			std::tr1::unordered_map<uint32_t,info_storage>::iterator it = _info_dict.find(query_in_it[i]);
 #else
-			std::map<uint32_t,Json::Value>::iterator it = _info_dict.find(query_in_it[i]);
+			std::map<uint32_t,info_storage>::iterator it = _info_dict.find(query_in_it[i]);
 #endif
 			if (it != _info_dict.end())
 			{
-				float score = policy_jisuan_score(in_query,in_term_list,query_json,it->second,search_mode);
+				int score = policy_compute_score(in_query,in_term_list,query_json,it->second,search_mode);
 				sort_myclass my(query_in_it[i], score);
 				vect_score.push_back(my);
 			}
@@ -356,27 +500,44 @@ bool Search_Engine::search(std::vector<std::string> & in_term_list,
 		}
 	}
 
+	gettimeofday(&l_time[l_time_pos++],0);
 	//sort
 	std::sort(vect_score.begin(), vect_score.end()); 
 
+	gettimeofday(&l_time[l_time_pos++],0);
 	//out to out_vec
 	{
 		AUTO_LOCK auto_lock(&_info_dict_lock,false);
+
 		for (int i = in_start_id;i < in_start_id + in_ret_num && i < vect_score.size();i++)
 		{
 #ifdef _USE_HASH_
-			std::tr1::unordered_map<uint32_t,Json::Value>::iterator it = _info_dict.find(vect_score[i].pos);
+			std::tr1::unordered_map<uint32_t,info_storage>::iterator it = _info_dict.find(vect_score[i].pos);
 #else
-			std::map<uint32_t,Json::Value>::iterator it = _info_dict.find(vect_score[i].pos);
+			std::map<uint32_t,info_storage>::iterator it = _info_dict.find(vect_score[i].pos);
 #endif
 			if (it != _info_dict.end())
 			{
-				out_vec.push_back(it->second["show_info"]);
+				out_info_vec.push_back(it->second.info_json_ori_str);
 				//dump score to json
-				out_vec.back()["comse_score"] = vect_score[i].score;
+				out_score_vec.push_back(vect_score[i].score);
 			}
 		}
+
+		//output recall num
+		recall_num = query_in_it.size(); 
+
 	}
+	gettimeofday(&l_time[l_time_pos++],0);
+
+	snprintf(log_buff,sizeof(log_buff),"cal_time recall=%d|compute=%d|sort=%d|package=%d search_mode=%d:recall_num=%d:query=%s"
+			,int((l_time[1].tv_sec - l_time[0].tv_sec)*1000000) + int(l_time[1].tv_usec - l_time[0].tv_usec)  //recall
+			,int((l_time[2].tv_sec - l_time[1].tv_sec)*1000000) + int(l_time[2].tv_usec - l_time[1].tv_usec)  //compute
+			,int((l_time[3].tv_sec - l_time[2].tv_sec)*1000000) + int(l_time[3].tv_usec - l_time[2].tv_usec)  //sort
+			,int((l_time[4].tv_sec - l_time[3].tv_sec)*1000000) + int(l_time[4].tv_usec - l_time[3].tv_usec)  //package
+			,search_mode,recall_num,in_query.c_str()
+		);
+	g_log.write_record(log_buff);
 	return true;
 }
 
@@ -394,12 +555,14 @@ bool Search_Engine::dump_to_file()
 		{
 			AUTO_LOCK auto_lock(&_info_dict_lock,false);
 #ifdef _USE_HASH_
-			for (std::tr1::unordered_map<uint32_t,Json::Value>::iterator it = _info_dict.begin(); it != _info_dict.end(); ++it)
+			for (std::tr1::unordered_map<uint32_t,info_storage>::iterator it = _info_dict.begin(); it != _info_dict.end(); ++it)
 #else
-				for (std::map<uint32_t,Json::Value>::iterator it = _info_dict.begin(); it != _info_dict.end(); ++it)
+				for (std::map<uint32_t,info_storage>::iterator it = _info_dict.begin(); it != _info_dict.end(); ++it)
 #endif
 				{
-					os << json_writer.write(it->second);  
+					std::string output_str;
+					info_2_json(it->second,output_str);
+					os << output_str << "\n";  
 				}
 		}
 		os.close();  
@@ -426,6 +589,8 @@ bool Search_Engine::load_from_file()
 		//parse use json
 		if (!json_reader.parse(in_buff,(char *)in_buff + strlen(in_buff), tmp_json)) 
 		{
+			g_log.write_record("json parse error");
+			g_log.write_record(in_buff);
 			continue;
 		}
 
@@ -438,6 +603,8 @@ bool Search_Engine::load_from_file()
 				|| tmp_json["show_info"].isNull() 
 				|| tmp_json["cmd_info"]["title4se"].isNull() )
 		{
+			g_log.write_record("json check error");
+			g_log.write_record(in_buff);
 			continue;
 		}
 
@@ -480,7 +647,11 @@ bool Search_Engine::load_from_file()
 
 		}
 		else
-		{continue;}
+		{
+			g_log.write_record("comse cmd_type error");
+			g_log.write_record(in_buff);
+			continue;
+		}
 	}
 
 	return true;

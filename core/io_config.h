@@ -1,17 +1,11 @@
 /***************************************************************************
  * 
- * Copyright (c) 2015 Baidu.com, Inc. All Rights Reserved
- * 
+ *	author:dodng
+ *	e-mail:dodng12@163.com
+ * 	2017/3/16
+ *   
  **************************************************************************/
  
- 
- 
-/**
- * @file config.h
- * @date 2015/07/31 10:11:57
- * @brief 
- *  
- **/
 
 
 
@@ -60,8 +54,9 @@ typedef void (* event_cb_func)(int fd, short int events, void *arg);
 
 struct sig_ev_arg 
 {
-	int notify_fd;
 	void *ptr;
+	int listen_fd;
+	
 };
 
 

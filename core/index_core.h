@@ -1,3 +1,12 @@
+/***************************************************************************
+ * 
+ *	author:dodng
+ *	e-mail:dodng12@163.com
+ * 	2017/3/16
+ *   
+ **************************************************************************/
+
+
 #ifndef __INDEX_CORE_H_
 #define __INDEX_CORE_H_
 
@@ -13,7 +22,12 @@
 #include <string>
 #include <pthread.h>
 
+#define MAX_RECALL_NUM (100000)
+#define MAX_INDEX_NUM  (200000)
+
+
 ///tools
+
 
 class AUTO_LOCK
 {
@@ -120,13 +134,28 @@ class AutoLock_Mutex
 		pthread_mutex_t *m_pmutex;
 };
 
+class AutoRelease_HeapVec
+{
+	public:
+		AutoRelease_HeapVec()
+		{
+			m_p_vec = new std::vector<uint32_t>();
+		}
+		~AutoRelease_HeapVec()
+		{
+			if (m_p_vec != 0)
+			{delete m_p_vec;}
+		}
+		std::vector<uint32_t> *m_p_vec;
+};
+
 inline uint32_t get_adapt_mem(uint32_t use_mem,uint32_t default_data_num)
 {
 	uint32_t ret = default_data_num;
 	if (use_mem < 1024)
 	{return ret;}
 
-	for (uint32_t i = (1024*1024); i >=1024; i/=2)
+	for (uint32_t i = (4*1024); i >=1024; i/=2)
 	{
 		if (use_mem >= i)
 		{
@@ -163,7 +192,7 @@ class Index_Core
 	public:
 		Index_Core(int data_num = 512,int inner_lock_num = 128):_data_num((uint32_t)data_num)
 									,_inner_lock_num((uint32_t)inner_lock_num),index_inner_lock_p(0)
-															 ,_hash_now_num(0)
+									,_hash_now_num(0),_shrink_buffer_now(0)
 	{
 		if (data_num <=1 || inner_lock_num <=0)
 		{
@@ -180,6 +209,9 @@ class Index_Core
 		{
 			pthread_rwlock_init(&index_inner_lock_p[i],NULL);
 		}
+		// _shrink_buffer init
+		_shrink_buffer = 0;
+		_shrink_buffer = new uint32_t[MAX_INDEX_NUM];
 
 	}
 		~Index_Core()
@@ -200,6 +232,11 @@ class Index_Core
 				delete []index_inner_lock_p;
 				index_inner_lock_p = 0;
 
+			}
+		// _shrink_buffer clear
+			if (_shrink_buffer != 0)
+			{
+				delete []_shrink_buffer;
 			}
 		}
 		//index function
@@ -229,6 +266,9 @@ class Index_Core
 		pthread_mutex_t index_update_lock;//write data to Serial	
 		//map record insert and delete
 		uint32_t _hash_now_num;
+		//for shrink use
+		uint32_t *_shrink_buffer;
+		int _shrink_buffer_now;
 
 };
 

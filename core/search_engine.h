@@ -1,3 +1,11 @@
+/***************************************************************************
+ * 
+ *	author:dodng
+ *	e-mail:dodng12@163.com
+ * 	2017/3/16
+ *   
+ **************************************************************************/
+
 #ifndef COMSE_SEARCH_ENGINE_H_
 #define COMSE_SEARCH_ENGINE_H_
 
@@ -17,10 +25,11 @@
 #include <stdint.h> 
 #include <vector>
 #include "cppjieba/Jieba.hpp"
+#include <set>
 
 /////
 
-float policy_jisuan_score(std::string &query,std::vector<std::string> & term_list,Json::Value & query_json,Json::Value & one_info);
+int policy_compute_score(std::string &query,std::vector<std::string> & term_list,Json::Value & query_json,Json::Value & one_info);
 void policy_cut_query(cppjieba::Jieba &jieba,std::string & query,std::vector<std::string> &term_list);
 
 enum search_mode
@@ -29,13 +38,22 @@ enum search_mode
     or_mode = 1
 };
 
-#define INDEX_ONE_NODE_NUM (512)
+#define INDEX_ONE_NODE_NUM (64)
 #define INDEX_TERM_LOCK_NUM (128)
-#define DEFAULT_SCORE (0.0f)
-#define DEFAULT_DEL_NEED_SHRINK (1024)
+#define DEFAULT_SCORE (0)
+#define DEFAULT_DEL_NEED_SHRINK (1024*2)
 #define DEFAULT_ADD_NEED_SHRINK_AVG ((INDEX_ONE_NODE_NUM)*2)
 #define DEFAULT_ADD_NEED_SHRINK_NODE (128)
 #define MAX_GETLINE_BUFF (1024*1024)
+
+/////
+struct info_storage
+{
+	std::string title4se;
+//	std::vector<std::string> term4se_vec;
+	std::set<std::string> term4se_set;
+	std::string info_json_ori_str;
+};
 
 /////
 
@@ -54,7 +72,6 @@ class Search_Engine{
 			if (0 != p_file_load_file)
 			{
 				_load_file = p_file_load_file;
-				load_from_file();
 			}	
 		}
 		~Search_Engine()
@@ -69,7 +86,9 @@ class Search_Engine{
 		bool search(std::vector<std::string> & in_term_list,
 				std::string & in_query,
 				Json::Value & query_json,
-				std::vector<Json::Value> &out_vec,
+				std::vector<std::string> & out_info_vec,
+				std::vector<int> & out_score_vec,
+				int &recall_num,
 				int in_start_id = 0,int in_ret_num = 20,int in_max_ret_num = 40,int search_mode = and_mode);
 		bool dump_to_file();
 		bool load_from_file();
@@ -77,17 +96,17 @@ class Search_Engine{
 		//index
 		Index_Core _index_core;
 #ifdef _USE_HASH_
-		std::tr1::unordered_map<uint32_t,Json::Value> _info_dict;
+		std::tr1::unordered_map<uint32_t,info_storage> _info_dict;
 		std::tr1::unordered_map<std::string,uint32_t> _info_md5_dict;
 #else
-		std::map<uint32_t,Json::Value> _info_dict;
+		std::map<uint32_t,info_storage> _info_dict;
 		std::map<std::string,uint32_t> _info_md5_dict;
 #endif
 		pthread_rwlock_t _info_dict_lock;
 		pthread_rwlock_t _info_md5_dict_lock;
 		//json
-		Json::Reader json_reader;
-		Json::FastWriter json_writer;
+		Json::Reader json_reader;//just one thread,not need lock
+		Json::FastWriter json_writer;//just one thread,not need lock
 		//data
 		uint32_t max_index_num;
 		//file
