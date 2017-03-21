@@ -1,8 +1,8 @@
-## Comse
+## What is Comse?
 
 Comse is a lightweigt common search engine,and it support fulltext search(index cross search and index sum search).
 
-## Build
+## Building Comse
 
 If First build:
 
@@ -19,7 +19,7 @@ cd comse/core
 make clean;make
 ```
 
-## Run
+## Running Comse
 Run these in different consoles:
 
 ```
