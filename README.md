@@ -43,7 +43,7 @@ python example:
 * delete data
 * and search data
 * or search data
-* dump-all data(default path:./index/dump.json.file)
+* dump-all data(default path: ./index/dump.json.file)
 
 ```
 cd comse/examples ; python client_update.py message.add
@@ -54,4 +54,4 @@ cd comse/examples ; python client_update.py message.dump-all
 
 ```
 
-load-all data(just load one time,default path:./index/load.json.file)
+load-all data(just load one time,default path: ./index/load.json.file)
