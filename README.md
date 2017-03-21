@@ -36,9 +36,9 @@ sh -x run.sh
 
 ## How to use
 
-1.load-all data(just load one time,default path: ./index/load.json.file)
+1. load-all data(just load one time,default path: ./index/load.json.file)
 
-2.Search data use search_ip and search_port,Other add,del,dump-all data use update_ip and update_port!
+2. Search data use search_ip and search_port,Other add,del,dump-all data use update_ip and update_port!
 
 python example:
 
