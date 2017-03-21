@@ -36,6 +36,12 @@ sh -x run.sh
 
 ## How to use
 
+load-all data(just load one time,default path: ./index/load.json.file)
+
+search data use search_ip and search_port
+
+other add,del,dump-all use update_ip and update_port
+
 python example:
 
 * insert data
@@ -53,4 +59,3 @@ cd comse/examples ; python client_update.py message.dump-all
 
 ```
 
-load-all data(just load one time,default path: ./index/load.json.file)
