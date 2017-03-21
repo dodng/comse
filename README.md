@@ -40,6 +40,8 @@ sh -x run.sh
 
 2. Search data use search_ip and search_port,Other add,del,dump-all data use update_ip and update_port!
 
+3. show_info field can storage and return a whatever json data which you want use.
+
 python example:
 
 * insert data
