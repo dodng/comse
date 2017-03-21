@@ -53,3 +53,5 @@ cd comse/examples ; python client_search.py message.or-search
 cd comse/examples ; python client_update.py message.dump-all
 
 ```
+
+load-all data(just load one time,default path:./index/load.json.file)
