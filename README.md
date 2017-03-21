@@ -28,7 +28,6 @@ make clean;make
 ```
 
 ## Running Comse
-Run these in different consoles:
 
 ```
 cd comse/service
