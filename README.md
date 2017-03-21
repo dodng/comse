@@ -18,3 +18,11 @@ else:
 cd comse/core
 make clean;make
 ```
+
+## Run
+Run these in different consoles:
+
+```
+cd comse/service
+sh -x run.sh
+```
