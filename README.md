@@ -4,7 +4,7 @@ Comse is a lightweigt common search engine,and it support fulltext search(index 
 
 ## Build
 
-For First build:
+If First build:
 
 ```
 git clone https://github.com/dodng/comse.git
@@ -12,7 +12,7 @@ cd comse/core
 sh -x build.sh
 ```
 
-Not first build:
+else:
 
 ```
 cd comse/core
