@@ -5,9 +5,7 @@ Comse is a lightweigt common search engine,and it support fulltext search(index 
 Main technology:
 
 * dynamically increseaing or shrinking index data structures(for fast insert,delete index)
-* use linked list to save index,and every linked node has one adaptive size linear table(for fast search index)
 * use json data via http post to Interact(easy to use curl、python、php etc...)
-* Other include (1. multithread to search 2. asynchronous io event with libevent 3. use pthread_rwlock_t lock)
 
 
 ## Building Comse
