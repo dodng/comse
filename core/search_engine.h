@@ -29,13 +29,14 @@
 
 /////
 
-int policy_compute_score(std::string &query,std::vector<std::string> & term_list,Json::Value & query_json,Json::Value & one_info);
+//int policy_compute_score(std::string &query,std::vector<std::string> & term_list,Json::Value & query_json,info_storage & one_info,int search_mode);
 void policy_cut_query(cppjieba::Jieba &jieba,std::string & query,std::vector<std::string> &term_list);
 
 enum search_mode
 {
     and_mode = 0,
-    or_mode = 1
+    or_mode = 1,
+    rela_mode = 2
 };
 
 #define INDEX_ONE_NODE_NUM (64)
@@ -45,6 +46,7 @@ enum search_mode
 #define DEFAULT_ADD_NEED_SHRINK_AVG ((INDEX_ONE_NODE_NUM)*2)
 #define DEFAULT_ADD_NEED_SHRINK_NODE (128)
 #define MAX_GETLINE_BUFF (1024*1024)
+#define OR_SEARCH_SKIP_TERM_INDEX_LENGTH (20000)
 
 /////
 struct info_storage
@@ -54,6 +56,8 @@ struct info_storage
 	std::set<std::string> term4se_set;
 	std::string info_json_ori_str;
 };
+
+class sort_myclass;
 
 /////
 
@@ -93,6 +97,27 @@ class Search_Engine{
 		bool dump_to_file();
 		bool load_from_file();
 	private:
+		bool search_find_first_term(int search_mode,
+				std::vector<std::string> & in_term_list,
+				int & term_pos,
+				std::vector<bool> & term_vec_if_skip);
+		void search_recall(int search_mode,
+				std::vector<std::string> & in_term_list,
+				int term_pos,
+				std::vector<bool> & term_vec_if_skip,
+				std::vector<uint32_t> & query_in_it,
+				std::vector<uint32_t> & query_out_it);
+		void search_compute(std::vector<uint32_t> & query_in_it,
+				std::string & in_query,
+				std::vector<std::string> & in_term_list,
+				Json::Value & query_json,
+				int search_mode,
+				std::vector< sort_myclass > & vect_score);
+		void search_filter(std::vector<std::string> & in_term_list,
+				std::string & in_query,
+				std::vector<info_storage>  & out_info_vec_ori,
+				int search_mode,
+				std::vector<bool> &out_ret_vec_ori);
 		//index
 		Index_Core _index_core;
 #ifdef _USE_HASH_
@@ -114,4 +139,5 @@ class Search_Engine{
 		std::string _load_file;
 
 };
+
 #endif

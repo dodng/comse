@@ -4,10 +4,80 @@
 #include <fstream> 
 #include "easy_log.h"
 #include <sys/time.h>
+#include "rank_lcs.h"
 
 extern cppjieba::Jieba g_jieba;
 extern pthread_mutex_t g_jieba_lock;
 extern easy_log g_log;
+
+//get rela score,0-100
+//error return -1
+int get_rela_score(const char *p_str1,const char *p_str2)
+{
+	if (0 == p_str1 || 0 == p_str2) {return -1;}
+	if (strlen(p_str1) <= 0 || strlen(p_str2) <= 0) {return -2;}
+
+	std::string lcs;//longest common sequence
+	lcs = fast_lcs_v3_1(p_str1,p_str2);
+	int min_len = (strlen(p_str1) > strlen(p_str2) ? strlen(p_str2) : strlen(p_str1));
+	return (int)((lcs.length() * 100.0f) / (min_len));
+}
+
+int get_rela_score_2(std::vector<std::string> & term_list,std::set<std::string> &term4se_set)
+{
+	if (term_list.size() <= 0 || term4se_set.size() <= 0) {return -1;}
+	int left_len = 0;
+	int right_len = 0;
+	int and_len = 0;
+
+	std::set<std::string>::iterator term_hash_it;
+
+	for (int i = 0 ; i < term_list.size();i++)
+	{
+		left_len += term_list[i].length();
+
+		term_hash_it = term4se_set.find(term_list[i]);
+		if (term_hash_it != term4se_set.end()) 
+		{
+			and_len += term_list[i].length();
+		}
+	}
+
+	for (std::set<std::string>::iterator it = term4se_set.begin(); it != term4se_set.end(); ++it)
+	{
+		right_len += (*it).length();
+	}
+	int min_len = left_len > right_len ? right_len : left_len;
+	return (int)((and_len * 100.0f) / (min_len));
+}
+
+int get_rela_score_2(std::set<std::string> &term4se_set_1,std::set<std::string> &term4se_set_2)
+{
+	if (term4se_set_1.size() <= 0 || term4se_set_2.size() <= 0) {return -1;}
+	int left_len = 0;
+	int right_len = 0;
+	int and_len = 0;
+
+	std::set<std::string>::iterator term_hash_it;
+
+	for (std::set<std::string>::iterator it = term4se_set_1.begin(); it != term4se_set_1.end(); ++it)
+	{
+		left_len += (*it).length();
+
+		term_hash_it = term4se_set_2.find(*it);
+		if (term_hash_it != term4se_set_2.end()) 
+		{
+			and_len += (*it).length();
+		}
+	}
+
+	for (std::set<std::string>::iterator it = term4se_set_2.begin(); it != term4se_set_2.end(); ++it)
+	{
+		right_len += (*it).length();
+	}
+	int min_len = left_len > right_len ? right_len : left_len;
+	return (int)((and_len * 100.0f) / (min_len));
+}
 
 int policy_compute_score(std::string &query,std::vector<std::string> & term_list,Json::Value & query_json,info_storage & one_info,int search_mode)
 {
@@ -15,7 +85,7 @@ int policy_compute_score(std::string &query,std::vector<std::string> & term_list
 	if (one_info.info_json_ori_str.size() <= 0 || 
 			one_info.title4se.size() <= 0 ) {return ret;}
 
-	if (search_mode == or_mode)
+	if (search_mode == or_mode || search_mode == rela_mode)
 	{
 		int or_terms_length = 0;
 		int or_terms_num = 0;
@@ -39,9 +109,9 @@ int policy_compute_score(std::string &query,std::vector<std::string> & term_list
 	}
 	else
 	{
-		ret = (10000 - one_info.title4se.size());
+		ret = (1000 - one_info.title4se.size());
 	}
-	return ret;
+	return (ret * 1000);
 }
 
 void policy_cut_query(cppjieba::Jieba &jieba,std::string & query,std::vector<std::string> &term_list)
@@ -124,7 +194,6 @@ bool info_2_json(info_storage & info_stg, std::string & json_output_str)
 ////////////////////////////////////////////////////////////////////
 
 //tools:
-
 class sort_myclass {
 	public:
 		sort_myclass(uint32_t a, int b):pos(a), score(b){}
@@ -384,84 +453,27 @@ bool Search_Engine::search(std::vector<std::string> & in_term_list,
 	int l_time_pos = 0;
 
 	gettimeofday(&l_time[l_time_pos++],0);
-	//select a term which has min index numbers
 	int term_pos = 0;
-	int min_index_numbers = 0;
-	if (search_mode == and_mode)
-	{
-		for (int i = 0;i < in_term_list.size(); i++)
-		{
-			index_hash_value i_hash_value = _index_core.find_index(in_term_list[i]);
+	std::vector<bool> term_vec_if_skip;
 
-			if (i_hash_value.sum_node_num <= 0) 
-			{//this term not exist index
-				return true;
-			}
+	//find the first term
+	if (search_find_first_term(search_mode,in_term_list,term_pos,term_vec_if_skip))
+	{return true;}
 
-			if (i == 0)
-			{//init
-				term_pos = i;
-				min_index_numbers = i_hash_value.use_data_num;
-			}
-			else
-			{
-				if (i_hash_value.use_data_num < min_index_numbers)
-				{
-					term_pos = i;
-					min_index_numbers = i_hash_value.use_data_num;
-				}
-			}
-		}
-	}
 	//get recall index numbers vector
 	std::vector<uint32_t> query_in;
 	std::vector<uint32_t> query_out;
 	query_in.reserve(MAX_RECALL_NUM + 128);
 	query_out.reserve(MAX_RECALL_NUM + 128);
+	std::vector<info_storage>  out_info_vec_ori;
+	std::vector<int> out_score_vec_ori;
+	std::vector<bool> out_ret_vec_ori;
 
 	std::vector<uint32_t> & query_in_it = query_in;
 	std::vector<uint32_t> & query_out_it = query_out;
 
-	_index_core.all_query_index(in_term_list[term_pos],query_in_it);
 
-	if (search_mode == and_mode)
-	{
-		for (int i = 0;i < in_term_list.size(); i++)
-		{
-			if (i == term_pos) {continue;}
-			_index_core.cross_query_index(in_term_list[i],query_in_it,query_out_it);
-			//swap query_in and query_out ,and clear query_out to next step use
-			std::vector<uint32_t> & tmp_it = query_in_it;
-			query_in_it = query_out_it;
-			query_out_it = tmp_it;
-			query_out_it.clear();
-		}
-	}
-	else
-	{
-		for (int i = 0;i < in_term_list.size(); i++)
-		{
-			std::vector<uint32_t>  tmp_vec;
-			if (i == term_pos) {continue;}
-
-			_index_core.all_query_index(in_term_list[i],tmp_vec);
-			merge_sort_2way(query_in_it,tmp_vec,query_out_it);
-			//swap query_in and query_out ,and clear query_out to next step use
-			std::vector<uint32_t> & tmp_it = query_in_it;
-			query_in_it = query_out_it;
-			query_out_it = tmp_it;
-			query_out_it.clear();
-
-			
-			if (query_in_it.size() > MAX_RECALL_NUM) //avoid too many search and overflow stack size
-			{
-				break;
-			}
-
-		}
-
-	}
-
+	search_recall(search_mode, in_term_list, term_pos, term_vec_if_skip, query_in_it, query_out_it);
 	gettimeofday(&l_time[l_time_pos++],0);
 
 	//check in_start_id and in_ret_num
@@ -473,38 +485,14 @@ bool Search_Engine::search(std::vector<std::string> & in_term_list,
 	//compute every index score,and get the need number vector,can use min heap sort
 	std::vector< sort_myclass > vect_score;
 	vect_score.reserve(MAX_RECALL_NUM + 128);
+	
+	search_compute(query_in_it, in_query, in_term_list, query_json, search_mode, vect_score);
 
-	{
-		AUTO_LOCK auto_lock(&_info_dict_lock,false);
-
-		for (int i = 0; i < query_in_it.size(); i++)
-		{
-#ifdef _USE_HASH_
-			std::tr1::unordered_map<uint32_t,info_storage>::iterator it = _info_dict.find(query_in_it[i]);
-#else
-			std::map<uint32_t,info_storage>::iterator it = _info_dict.find(query_in_it[i]);
-#endif
-			if (it != _info_dict.end())
-			{
-				int score = policy_compute_score(in_query,in_term_list,query_json,it->second,search_mode);
-				sort_myclass my(query_in_it[i], score);
-				vect_score.push_back(my);
-			}
-			else
-			{
-				//not find,default score is 0.0
-				sort_myclass my(query_in_it[i], DEFAULT_SCORE);
-				vect_score.push_back(my);
-			}
-
-		}
-	}
-
-	gettimeofday(&l_time[l_time_pos++],0);
 	//sort
-	std::sort(vect_score.begin(), vect_score.end()); 
-
 	gettimeofday(&l_time[l_time_pos++],0);
+	std::sort(vect_score.begin(), vect_score.end()); 
+	gettimeofday(&l_time[l_time_pos++],0);
+
 	//out to out_vec
 	{
 		AUTO_LOCK auto_lock(&_info_dict_lock,false);
@@ -518,9 +506,9 @@ bool Search_Engine::search(std::vector<std::string> & in_term_list,
 #endif
 			if (it != _info_dict.end())
 			{
-				out_info_vec.push_back(it->second.info_json_ori_str);
-				//dump score to json
-				out_score_vec.push_back(vect_score[i].score);
+				out_info_vec_ori.push_back(it->second);
+				out_score_vec_ori.push_back(vect_score[i].score);
+				out_ret_vec_ori.push_back(true);
 			}
 		}
 
@@ -530,6 +518,20 @@ bool Search_Engine::search(std::vector<std::string> & in_term_list,
 	}
 	gettimeofday(&l_time[l_time_pos++],0);
 
+	//filter some result
+	search_filter(in_term_list, in_query, out_info_vec_ori, search_mode, out_ret_vec_ori);
+	
+	for (int i = 0 ;i < out_info_vec_ori.size();i++)
+	{
+		if (out_ret_vec_ori[i])
+		{
+			//	int rela_score = get_rela_score(in_query.c_str(),out_info_vec_ori[i].title4se.c_str());
+			int rela_score = get_rela_score_2(in_term_list,out_info_vec_ori[i].term4se_set);
+			out_info_vec.push_back(out_info_vec_ori[i].info_json_ori_str);
+			//dump score to json
+			out_score_vec.push_back(out_score_vec_ori[i % out_score_vec_ori.size()] + rela_score);
+		}
+	}
 	snprintf(log_buff,sizeof(log_buff),"cal_time recall=%d|compute=%d|sort=%d|package=%d search_mode=%d:recall_num=%d:query=%s"
 			,int((l_time[1].tv_sec - l_time[0].tv_sec)*1000000) + int(l_time[1].tv_usec - l_time[0].tv_usec)  //recall
 			,int((l_time[2].tv_sec - l_time[1].tv_sec)*1000000) + int(l_time[2].tv_usec - l_time[1].tv_usec)  //compute
@@ -655,4 +657,213 @@ bool Search_Engine::load_from_file()
 	}
 
 	return true;
+}
+
+// return false continue next,true finish the function
+//
+bool Search_Engine::search_find_first_term(int search_mode,
+		std::vector<std::string> & in_term_list, 
+		int & in_term_pos, 
+		std::vector<bool> & term_vec_if_skip)
+{
+	int term_pos = 0;
+	int min_index_numbers = 0;
+
+	if (search_mode == and_mode)
+	{
+		//select a term which has min index numbers
+		for (int i = 0;i < in_term_list.size(); i++)
+		{
+			index_hash_value i_hash_value = _index_core.find_index(in_term_list[i]);
+
+			if (i_hash_value.sum_node_num <= 0) 
+			{//this term not exist index
+				return true;
+			}
+
+			if (i == 0)
+			{//init
+				term_pos = i;
+				min_index_numbers = i_hash_value.use_data_num;
+			}
+			else
+			{
+				if (i_hash_value.use_data_num < min_index_numbers)
+				{
+					term_pos = i;
+					min_index_numbers = i_hash_value.use_data_num;
+				}
+			}
+		}
+	}
+	// select the good term (skip the term > OR_SEARCH_SKIP_TERM_INDEX_LENGTH to quick search)
+	else
+	{
+		for (int i = 0;i < in_term_list.size(); i++)
+		{
+			index_hash_value i_hash_value = _index_core.find_index(in_term_list[i]);
+
+			if (i_hash_value.use_data_num >= OR_SEARCH_SKIP_TERM_INDEX_LENGTH)
+			{term_vec_if_skip.push_back(true);}
+			else
+			{term_vec_if_skip.push_back(false);}
+
+			//select a term which has min index numbers
+			if (i == 0)
+			{//init
+				term_pos = i;
+				min_index_numbers = i_hash_value.use_data_num;
+			}
+			else
+			{
+				if (i_hash_value.use_data_num < min_index_numbers)
+				{
+					term_pos = i;
+					min_index_numbers = i_hash_value.use_data_num;
+				}
+			}
+		}
+	}
+
+	in_term_pos = term_pos;
+	return false;
+
+}
+
+void Search_Engine::search_recall(int search_mode,
+		std::vector<std::string> & in_term_list,
+		int term_pos,
+		std::vector<bool> & term_vec_if_skip,
+		std::vector<uint32_t> & query_in_it,
+		std::vector<uint32_t> & query_out_it)
+{
+	_index_core.all_query_index(in_term_list[term_pos],query_in_it);
+
+	if (search_mode == and_mode)
+	{
+		for (int i = 0;i < in_term_list.size(); i++)
+		{
+			if (i == term_pos) {continue;}
+			_index_core.cross_query_index(in_term_list[i],query_in_it,query_out_it);
+			//swap query_in and query_out ,and clear query_out to next step use
+			std::vector<uint32_t> & tmp_it = query_in_it;
+			query_in_it = query_out_it;
+			query_out_it = tmp_it;
+			query_out_it.clear();
+		}
+	}
+	else
+	{
+		for (int i = 0;i < in_term_list.size(); i++)
+		{
+			std::vector<uint32_t>  tmp_vec;
+			if (i == term_pos) {continue;}
+			else if (term_vec_if_skip[i]) {continue;}
+
+
+			_index_core.all_query_index(in_term_list[i],tmp_vec);
+			merge_sort_2way(query_in_it,tmp_vec,query_out_it);
+			//swap query_in and query_out ,and clear query_out to next step use
+			std::vector<uint32_t> & tmp_it = query_in_it;
+			query_in_it = query_out_it;
+			query_out_it = tmp_it;
+			query_out_it.clear();
+
+
+			if (query_in_it.size() > MAX_RECALL_NUM) //avoid too many search and overflow stack size
+			{
+				break;
+			}
+
+		}
+
+	}
+}
+
+void Search_Engine::search_compute(std::vector<uint32_t> & query_in_it,
+		std::string & in_query,
+		std::vector<std::string> & in_term_list,
+		Json::Value & query_json,
+		int search_mode,
+		std::vector< sort_myclass > & vect_score)
+{
+	AUTO_LOCK auto_lock(&_info_dict_lock,false);
+
+	for (int i = 0; i < query_in_it.size(); i++)
+	{
+#ifdef _USE_HASH_
+		std::tr1::unordered_map<uint32_t,info_storage>::iterator it = _info_dict.find(query_in_it[i]);
+#else
+		std::map<uint32_t,info_storage>::iterator it = _info_dict.find(query_in_it[i]);
+#endif
+		if (it != _info_dict.end())
+		{
+			int score = policy_compute_score(in_query,in_term_list,query_json,it->second,search_mode);
+			sort_myclass my(query_in_it[i], score);
+			vect_score.push_back(my);
+		}
+		else
+		{
+			//not find,default score is 0.0
+			sort_myclass my(query_in_it[i], DEFAULT_SCORE);
+			vect_score.push_back(my);
+		}
+
+	}
+}
+
+void Search_Engine::search_filter(std::vector<std::string> & in_term_list,
+		std::string & in_query,
+		std::vector<info_storage>  & out_info_vec_ori,
+		int search_mode,
+		std::vector<bool> &out_ret_vec_ori)
+{
+	char log_buff[1024] = {0};
+
+	//filter rela title:obj
+	if (search_mode == rela_mode)
+		for (int i = 0 ;i < out_info_vec_ori.size();i++)
+		{
+			//int rela_score = get_rela_score(in_query.c_str(),out_info_vec_ori[i].title4se.c_str());
+			int rela_score = get_rela_score_2(in_term_list,out_info_vec_ori[i].term4se_set);
+			if (rela_score < 50 || rela_score >= 90)
+			{//filter rela score too good or too bad query->obj
+				snprintf(log_buff,sizeof(log_buff),"title[%s]:obj[%s]:rela_score[%d]:filter1:query=%s"
+						,in_query.c_str()
+						,out_info_vec_ori[i].title4se.c_str()
+						,rela_score
+						,in_query.c_str()
+					);
+				g_log.write_record(log_buff);
+				out_ret_vec_ori[i] = false;
+			}
+
+		}
+
+	//filter rela obj:obj
+	if (search_mode == rela_mode)
+		for (int i = 0 ;i < out_info_vec_ori.size();i++)
+		{
+			for (int j = 0; j < i; j++)
+			{
+				if (out_ret_vec_ori[i] &&
+						out_ret_vec_ori[j])
+				{
+					//		int rela_score = get_rela_score(out_info_vec_ori[i].title4se.c_str(), out_info_vec_ori[j].title4se.c_str());
+					int rela_score = get_rela_score_2(out_info_vec_ori[i].term4se_set,out_info_vec_ori[j].term4se_set);
+					if (rela_score >= 80)
+					{//filter rela score too good obj->obj
+						snprintf(log_buff,sizeof(log_buff),"obj[%s]:obj[%s]:rela_score[%d]:filter2:query=%s"
+								,out_info_vec_ori[i].title4se.c_str()
+								,out_info_vec_ori[j].title4se.c_str()
+								,rela_score
+								,in_query.c_str()
+							);
+						g_log.write_record(log_buff);
+						out_ret_vec_ori[i] = false;
+					}
+				}
+			}
+		}
+
 }
