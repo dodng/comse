@@ -25,7 +25,7 @@
 #define MAX_PROCESS_THREAD (64)
 #define UPDATE_PROCESS_THREAD 1
 
-#define BUFF_SIZE (1024 * 4)
+#define BUFF_SIZE (1024 * 1024)
 
 enum status_code
 {
