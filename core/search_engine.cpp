@@ -287,7 +287,7 @@ bool Search_Engine::add(std::vector<std::string> & term_list,Json::Value & one_i
 	//check if validate
 	if (term_list.size() <= 0 || one_info.empty()) 
 	{
-		snprintf(log_buff,sizeof(log_buff),"term_list is empty or one_info is empty\0");
+		snprintf(log_buff,sizeof(log_buff),"term_list is empty or one_info is empty");
 		g_log.write_record(log_buff);
 		return false;
 	}
@@ -308,7 +308,7 @@ bool Search_Engine::add(std::vector<std::string> & term_list,Json::Value & one_i
 		//check if add
 		if (it != _info_md5_dict.end())
 		{
-			snprintf(log_buff,sizeof(log_buff),"add duplicate data:%s\0",json_str.c_str());
+			snprintf(log_buff,sizeof(log_buff),"add duplicate data:%s",json_str.c_str());
 			g_log.write_record(log_buff);
 			return true;		
 		}
@@ -321,7 +321,7 @@ bool Search_Engine::add(std::vector<std::string> & term_list,Json::Value & one_i
 	//output log
 	if (index_num % 10000 == 0)
 	{
-		snprintf(log_buff,sizeof(log_buff),"now max_index_num:%d\0",index_num);
+		snprintf(log_buff,sizeof(log_buff),"now max_index_num:%d",index_num);
 		g_log.write_record(log_buff);
 	}
 
@@ -347,7 +347,7 @@ bool Search_Engine::add(std::vector<std::string> & term_list,Json::Value & one_i
 			if (i_hash_value.sum_node_num >= DEFAULT_ADD_NEED_SHRINK_NODE &&
 					(i_hash_value.use_data_num / i_hash_value.sum_node_num) < DEFAULT_ADD_NEED_SHRINK_AVG) 
 			{
-				snprintf(log_buff,sizeof(log_buff),"add do shrink index[sum_node:%d] [use_data:%d] [del_data:%d] [term:%s]\0"
+				snprintf(log_buff,sizeof(log_buff),"add do shrink index[sum_node:%d] [use_data:%d] [del_data:%d] [term:%s]"
 						,i_hash_value.sum_node_num,i_hash_value.use_data_num,i_hash_value.del_data_num
 						,term_list[i].c_str());
 				g_log.write_record(log_buff);
@@ -355,7 +355,7 @@ bool Search_Engine::add(std::vector<std::string> & term_list,Json::Value & one_i
 				_index_core.shrink_index(term_list[i]);
 				i_hash_value = _index_core.find_index(term_list[i]);
 
-				snprintf(log_buff,sizeof(log_buff),"add done shrink index[sum_node:%d] [use_data:%d] [del_data:%d] [term:%s]\0"
+				snprintf(log_buff,sizeof(log_buff),"add done shrink index[sum_node:%d] [use_data:%d] [del_data:%d] [term:%s]"
 						,i_hash_value.sum_node_num,i_hash_value.use_data_num,i_hash_value.del_data_num
 						,term_list[i].c_str());
 				g_log.write_record(log_buff);
@@ -412,7 +412,7 @@ bool Search_Engine::del(std::vector<std::string> & term_list,Json::Value & one_i
 			index_hash_value i_hash_value = _index_core.find_index(term_list[i]);
 			if (i_hash_value.del_data_num >= DEFAULT_DEL_NEED_SHRINK) 
 			{
-				snprintf(log_buff,sizeof(log_buff),"del do shrink index[sum_node:%d] [use_data:%d] [del_data:%d] [term:%s]\0"
+				snprintf(log_buff,sizeof(log_buff),"del do shrink index[sum_node:%d] [use_data:%d] [del_data:%d] [term:%s]"
 						,i_hash_value.sum_node_num,i_hash_value.use_data_num,i_hash_value.del_data_num
 						,term_list[i].c_str());
 				g_log.write_record(log_buff);
@@ -420,7 +420,7 @@ bool Search_Engine::del(std::vector<std::string> & term_list,Json::Value & one_i
 				_index_core.shrink_index(term_list[i]);
 				i_hash_value = _index_core.find_index(term_list[i]);
 
-				snprintf(log_buff,sizeof(log_buff),"del done shrink index[sum_node:%d] [use_data:%d] [del_data:%d] [term:%s]\0"
+				snprintf(log_buff,sizeof(log_buff),"del done shrink index[sum_node:%d] [use_data:%d] [del_data:%d] [term:%s]"
 						,i_hash_value.sum_node_num,i_hash_value.use_data_num,i_hash_value.del_data_num
 						,term_list[i].c_str());
 				g_log.write_record(log_buff);
@@ -532,7 +532,7 @@ bool Search_Engine::search(std::vector<std::string> & in_term_list,
 			if (out_info_vec.size() >= in_max_ret_num) {break;}
 		}
 	}
-	snprintf(log_buff,sizeof(log_buff),"cal_time recall=%d|compute=%d|sort=%d|package=%d search_mode=%d:recall_num=%d:query=%s\0"
+	snprintf(log_buff,sizeof(log_buff),"cal_time recall=%d|compute=%d|sort=%d|package=%d search_mode=%d:recall_num=%d:query=%s"
 			,int((l_time[1].tv_sec - l_time[0].tv_sec)*1000000) + int(l_time[1].tv_usec - l_time[0].tv_usec)  //recall
 			,int((l_time[2].tv_sec - l_time[1].tv_sec)*1000000) + int(l_time[2].tv_usec - l_time[1].tv_usec)  //compute
 			,int((l_time[3].tv_sec - l_time[2].tv_sec)*1000000) + int(l_time[3].tv_usec - l_time[2].tv_usec)  //sort
@@ -591,7 +591,7 @@ bool Search_Engine::load_from_file()
 		//parse use json
 		if (!json_reader.parse(in_buff,(char *)in_buff + strlen(in_buff), tmp_json)) 
 		{
-			g_log.write_record("json parse error\0");
+			g_log.write_record("json parse error");
 			g_log.write_record(in_buff);
 			continue;
 		}
@@ -605,7 +605,7 @@ bool Search_Engine::load_from_file()
 				|| tmp_json["show_info"].isNull() 
 				|| tmp_json["cmd_info"]["title4se"].isNull() )
 		{
-			g_log.write_record("json check error\0");
+			g_log.write_record("json check error");
 			g_log.write_record(in_buff);
 			continue;
 		}
@@ -650,7 +650,7 @@ bool Search_Engine::load_from_file()
 		}
 		else
 		{
-			g_log.write_record("comse cmd_type error\0");
+			g_log.write_record("comse cmd_type error");
 			g_log.write_record(in_buff);
 			continue;
 		}
@@ -828,7 +828,7 @@ void Search_Engine::search_filter(std::vector<std::string> & in_term_list,
 			int rela_score = get_rela_score_2(in_term_list,out_info_vec_ori[i].term4se_set);
 			if (rela_score < 30 || rela_score >= 90)
 			{//filter rela score too good or too bad query->obj
-				snprintf(log_buff,sizeof(log_buff),"title[%s]:obj[%s]:rela_score[%d]:filter1:query=%s\0"
+				snprintf(log_buff,sizeof(log_buff),"title[%s]:obj[%s]:rela_score[%d]:filter1:query=%s"
 						,in_query.c_str()
 						,out_info_vec_ori[i].title4se.c_str()
 						,rela_score
@@ -853,7 +853,7 @@ void Search_Engine::search_filter(std::vector<std::string> & in_term_list,
 					int rela_score = get_rela_score_2(out_info_vec_ori[i].term4se_set,out_info_vec_ori[j].term4se_set);
 					if (rela_score >= 80)
 					{//filter rela score too good obj->obj
-						snprintf(log_buff,sizeof(log_buff),"obj[%s]:obj[%s]:rela_score[%d]:filter2:query=%s\0"
+						snprintf(log_buff,sizeof(log_buff),"obj[%s]:obj[%s]:rela_score[%d]:filter2:query=%s"
 								,out_info_vec_ori[i].title4se.c_str()
 								,out_info_vec_ori[j].title4se.c_str()
 								,rela_score

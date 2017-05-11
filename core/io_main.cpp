@@ -88,23 +88,35 @@ void SendData(int fd, short int events, void *arg)
 	int buff_len = p_it->send_buff_len;
 	int len;
 	char log_buff[BUFF_SIZE] = {0};
+	memset(log_buff,0,sizeof(log_buff));
 
 	if (events == EV_TIMEOUT)
 	{
 		close(p_ev->ev_fd);
 		event_del(p_ev);
 		it_pool_put(p_it);
-		snprintf(log_buff,sizeof(log_buff),"send timeout fd=[%d] error[%d]\0", fd, errno);
+		snprintf(log_buff,sizeof(log_buff),"send timeout fd=[%d] error[%d]", fd, errno);
 		g_log.write_record(log_buff);
 		return;
 	} 
 
 	len = send(fd, buff, p_it->now_send_len, MSG_NOSIGNAL);
+	gettimeofday(&p_it->l_time[5],0);
 	event_del(p_ev);
 
 	if(len >= 0)
 	{
-		snprintf(log_buff,sizeof(log_buff),"Thread[%x]\tClient[%d]:Send=%s\0",(int)pthread_self(),fd, buff);
+		snprintf(log_buff,sizeof(log_buff),
+				"Thread[%x]\tClient[%d]"
+				"All_time[accept2recv_event=%d,recv=%d,parse_recv=%d,do_policy=%d,send=%d]"
+				":Send=%s",
+				(int)pthread_self(), fd, 
+				int(p_it->l_time[1].tv_usec - p_it->l_time[0].tv_usec), 
+				int(p_it->l_time[2].tv_usec - p_it->l_time[1].tv_usec), 
+				int(p_it->l_time[3].tv_usec - p_it->l_time[2].tv_usec), 
+				int(p_it->l_time[4].tv_usec - p_it->l_time[3].tv_usec), 
+				int(p_it->l_time[5].tv_usec - p_it->l_time[4].tv_usec),
+				buff);
 		g_log.write_record(log_buff);
 		//send success
 		p_it->status = status_send;
@@ -115,7 +127,7 @@ void SendData(int fd, short int events, void *arg)
 	}
 	else
 	{
-		snprintf(log_buff,sizeof(log_buff),"send over[fd=%d] error[%d]:%s\0", fd, errno, strerror(errno));
+		snprintf(log_buff,sizeof(log_buff),"send over[fd=%d] error[%d]:%s", fd, errno, strerror(errno));
 		g_log.write_record(log_buff);
 		goto GC;
 	}
@@ -137,6 +149,7 @@ void RecvData(int fd, short int events, void *arg)
 	int buff_len = p_it->recv_buff_len - p_it->now_recv_len;
 	int len;
 	char log_buff[BUFF_SIZE] = {0};
+	memset(log_buff,0,sizeof(log_buff));
 
 	//timeout
 	if (events == EV_TIMEOUT)
@@ -144,13 +157,15 @@ void RecvData(int fd, short int events, void *arg)
 		close(p_ev->ev_fd);
 		event_del(p_ev);
 		it_pool_put(p_it);
-		snprintf(log_buff,sizeof(log_buff),"recv timeout fd=[%d] error[%d]\0", fd, errno);
+		snprintf(log_buff,sizeof(log_buff),"recv timeout fd=[%d] error[%d]", fd, errno);
 		g_log.write_record(log_buff);
 		return;
 	} 
 
 	// receive data
+	gettimeofday(&p_it->l_time[1],0);
 	len = recv(fd,buff, buff_len, 0);
+	gettimeofday(&p_it->l_time[2],0);
 	event_del(p_ev);
 
 	if(len > 0)
@@ -160,7 +175,7 @@ void RecvData(int fd, short int events, void *arg)
 		//regist send event
 		p_it->now_recv_len += len;
 		int parse_ret = p_it->http.parse_done((char *)(p_it->recv_buff));
-		snprintf(log_buff,sizeof(log_buff),"Thread[%x]\tClient[%d]:Recv=[%s]:Parse=[%d]\0",(int)pthread_self(),fd, buff, parse_ret);
+		snprintf(log_buff,sizeof(log_buff),"Thread[%x]\tClient[%d]:Recv=[%s]:Parse=[%d]",(int)pthread_self(),fd, buff, parse_ret);
 		g_log.write_record(log_buff);
 
 		if (parse_ret < 0 )
@@ -169,8 +184,11 @@ void RecvData(int fd, short int events, void *arg)
 		{reg_add_event(p_ev,p_it->sd,EV_READ,RecvData,p_it,base,&tv_recv_timeout);}
 		else
 		{
+			gettimeofday(&p_it->l_time[3],0);
 			p_it->policy.do_one_action(&p_it->http,p_it->send_buff,p_it->send_buff_len,p_it->now_send_len);
-			reg_add_event(p_ev,p_it->sd,EV_WRITE,SendData,p_it,base,NULL);
+			gettimeofday(&p_it->l_time[4],0);
+			SendData(p_it->sd,EV_WRITE,p_it);
+			//			reg_add_event(p_ev,p_it->sd,EV_WRITE,SendData,p_it,base,NULL);
 		}
 
 	}
@@ -178,12 +196,12 @@ void RecvData(int fd, short int events, void *arg)
 	{
 		if (len == 0)
 		{
-			snprintf(log_buff,sizeof(log_buff),"[fd=%d] , closed gracefully.\0", fd);
+			snprintf(log_buff,sizeof(log_buff),"[fd=%d] , closed gracefully.", fd);
 			g_log.write_record(log_buff);
 		}
 		else
 		{	
-			snprintf(log_buff,sizeof(log_buff),"recv[fd=%d] error[%d]:%s\0", fd, errno, strerror(errno));
+			snprintf(log_buff,sizeof(log_buff),"recv[fd=%d] error[%d]:%s", fd, errno, strerror(errno));
 			g_log.write_record(log_buff);
 		}
 		goto GC;
@@ -212,21 +230,22 @@ void UpdateAcceptListen(int fd, short what, void *arg)
 		int iret = 0;
 		if((iret = fcntl(accept_fd, F_SETFL, O_NONBLOCK)) < 0)
 		{   
-			snprintf(log_buff,sizeof(log_buff),"%s fd=%d: fcntl nonblocking error:%d\0", __func__, accept_fd, iret);
+			snprintf(log_buff,sizeof(log_buff),"%s fd=%d: fcntl nonblocking error:%d", __func__, accept_fd, iret);
 			g_log.write_record(log_buff);
 			return;
 		}  
 		// add a read event for receive data
 		struct interface_data *p_read_it = it_pool_get();
 		p_read_it->sd = accept_fd;
+		gettimeofday(&p_read_it->l_time[0],0);
 		reg_add_event(&(p_read_it->ev),accept_fd,EV_READ,RecvData,p_read_it,p_ev->ev_base,&tv_recv_timeout);
-		snprintf(log_buff,sizeof(log_buff),"process thread read new client fd[%d]\0",accept_fd);
+		snprintf(log_buff,sizeof(log_buff),"process thread read new client fd[%d]",accept_fd);
 		g_log.write_record(log_buff);
 
 	}
 	else 
 	{
-		snprintf(log_buff,sizeof(log_buff),"%s[%d]\t%s:accept  error return:%d, errno:%d\0", __FILE__,__LINE__,__func__,accept_fd,errno);
+		snprintf(log_buff,sizeof(log_buff),"%s[%d]\t%s:accept  error return:%d, errno:%d", __FILE__,__LINE__,__func__,accept_fd,errno);
 		g_log.write_record(log_buff);
 	}
 
@@ -250,7 +269,7 @@ void SearchAcceptListen(int fd, short what, void *arg)
 		int iret = 0;
 		if((iret = fcntl(accept_fd, F_SETFL, O_NONBLOCK)) < 0)
 		{   
-			snprintf(log_buff,sizeof(log_buff),"%s fd=%d: fcntl nonblocking error:%d\0", __func__, accept_fd, iret);
+			snprintf(log_buff,sizeof(log_buff),"%s fd=%d: fcntl nonblocking error:%d", __func__, accept_fd, iret);
 			g_log.write_record(log_buff);
 			return;
 		}  
@@ -258,14 +277,15 @@ void SearchAcceptListen(int fd, short what, void *arg)
 		struct interface_data *p_read_it = it_pool_get();
 		// add a read event for receive data
 		p_read_it->sd = accept_fd;
+		gettimeofday(&p_read_it->l_time[0],0);
 		reg_add_event(&(p_read_it->ev),accept_fd,EV_READ,RecvData,p_read_it,p_ev->ev_base,&tv_recv_timeout);
-		snprintf(log_buff,sizeof(log_buff),"process thread read new client fd[%d]\0",accept_fd);
+		snprintf(log_buff,sizeof(log_buff),"process thread read new client fd[%d]",accept_fd);
 		g_log.write_record(log_buff);
 
 	}
 	else 
 	{
-		snprintf(log_buff,sizeof(log_buff),"%s[%d]\t%s:accept  error return:%d, errno:%d\0", __FILE__,__LINE__,__func__,accept_fd,errno);
+		snprintf(log_buff,sizeof(log_buff),"%s[%d]\t%s:accept  error return:%d, errno:%d", __FILE__,__LINE__,__func__,accept_fd,errno);
 		g_log.write_record(log_buff);
 
 	}
@@ -416,7 +436,7 @@ int InitListenSocket(char *ip, short port)
 	sin.sin_port = htons(port); 
 	bind(listenFd, (const sockaddr*)&sin, sizeof(sin)); 
 	ret = listen(listenFd, g_listen_backlog); 
-	snprintf(log_buff,sizeof(log_buff),"server listen fd=%d port=%d retrun:%d errno:%d\0", listenFd,port,ret,errno);
+	snprintf(log_buff,sizeof(log_buff),"server listen fd=%d port=%d retrun:%d errno:%d", listenFd,port,ret,errno);
 	g_log.write_record(log_buff);
 	return listenFd;
 }
@@ -427,14 +447,14 @@ int main (int argc, char **argv)
 
 	//policy_interface_init_once
 	int ret = policy_interface_init_once();
-	snprintf(log_buff,sizeof(log_buff),"policy_interface_init_once return:%d\0",ret);
+	snprintf(log_buff,sizeof(log_buff),"policy_interface_init_once return:%d",ret);
 	g_log.write_record(log_buff);
 
 	//parse config
 	if (argc == 2)
 	{
 		int ret = parse_config(argv[1]);
-		snprintf(log_buff,sizeof(log_buff),"parse_config[%s] return:%d\0",argv[1],ret);
+		snprintf(log_buff,sizeof(log_buff),"parse_config[%s] return:%d",argv[1],ret);
 		g_log.write_record(log_buff);
 
 	}
@@ -444,7 +464,7 @@ int main (int argc, char **argv)
 	//check sock
 	if (search_port_sock <= 0 || update_port_sock <= 0)
 	{
-		snprintf(log_buff,sizeof(log_buff),"search[%d] or update[%d] sock listen error[%d]\0",search_port_sock,update_port_sock,errno);
+		snprintf(log_buff,sizeof(log_buff),"search[%d] or update[%d] sock listen error[%d]",search_port_sock,update_port_sock,errno);
 		g_log.write_record(log_buff);
 		return -1;
 	}
@@ -456,7 +476,7 @@ int main (int argc, char **argv)
 		int err = pthread_create(&ptocess_thread[i],0,ProcessThread,&notify_arg[i]);
 		if (err != 0)
 		{
-			snprintf(log_buff,sizeof(log_buff),"can't create ProcessThread thread:%s\0",strerror(err));
+			snprintf(log_buff,sizeof(log_buff),"can't create ProcessThread thread:%s",strerror(err));
 			g_log.write_record(log_buff);
 			return -1;
 		}
@@ -468,7 +488,7 @@ int main (int argc, char **argv)
 		int err = pthread_create(&update_ptocess_thread[i],0,UpdateProcessThread,&update_notify_arg[i]);
 		if (err != 0)
 		{
-			snprintf(log_buff,sizeof(log_buff),"can't create Update ProcessThread thread:%s\0",strerror(err));
+			snprintf(log_buff,sizeof(log_buff),"can't create Update ProcessThread thread:%s",strerror(err));
 			g_log.write_record(log_buff);
 			return -1;
 		}

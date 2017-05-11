@@ -14,6 +14,7 @@
 
 #include "http.h"
 #include "policy_interface.h"
+#include <sys/time.h>
 
 #define MICRO_SEC 1000000
 #define MILL_SEC 1000
@@ -74,6 +75,7 @@ class interface_data
 			sd = -1;
 			recv_buff = new char[recv_buff_len];
 			send_buff = new char[send_buff_len];
+
 		}
 		~interface_data()
 		{
@@ -104,6 +106,7 @@ class interface_data
 		struct event ev;
 		int status;
 		int sd;
+		struct timeval l_time[6];
 		http_entity http;
 		policy_entity policy;
 };
