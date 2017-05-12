@@ -10,6 +10,16 @@ extern cppjieba::Jieba g_jieba;
 extern pthread_mutex_t g_jieba_lock;
 extern easy_log g_log;
 
+inline int my_time_diff(struct timeval &start,struct timeval &end)
+{
+        if (start.tv_usec <= end.tv_usec)
+        {
+                return (end.tv_usec-start.tv_usec);
+        }
+        else
+                return (1000000 - start.tv_usec + end.tv_usec);
+}
+
 //get rela score,0-100
 //error return -1
 int get_rela_score(const char *p_str1,const char *p_str2)
@@ -533,10 +543,10 @@ bool Search_Engine::search(std::vector<std::string> & in_term_list,
 		}
 	}
 	snprintf(log_buff,sizeof(log_buff),"cal_time recall=%d|compute=%d|sort=%d|package=%d search_mode=%d:recall_num=%d:query=%s"
-			,int((l_time[1].tv_sec - l_time[0].tv_sec)*1000000) + int(l_time[1].tv_usec - l_time[0].tv_usec)  //recall
-			,int((l_time[2].tv_sec - l_time[1].tv_sec)*1000000) + int(l_time[2].tv_usec - l_time[1].tv_usec)  //compute
-			,int((l_time[3].tv_sec - l_time[2].tv_sec)*1000000) + int(l_time[3].tv_usec - l_time[2].tv_usec)  //sort
-			,int((l_time[4].tv_sec - l_time[3].tv_sec)*1000000) + int(l_time[4].tv_usec - l_time[3].tv_usec)  //package
+			,my_time_diff(l_time[0], l_time[1])  //recall
+			,my_time_diff(l_time[1], l_time[2])  //compute
+			,my_time_diff(l_time[2], l_time[3])  //sort
+			,my_time_diff(l_time[3], l_time[4])  //package
 			,search_mode,recall_num,in_query.c_str()
 		);
 	g_log.write_record(log_buff);

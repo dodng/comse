@@ -88,7 +88,6 @@ void SendData(int fd, short int events, void *arg)
 	int buff_len = p_it->send_buff_len;
 	int len;
 	char log_buff[BUFF_SIZE] = {0};
-	memset(log_buff,0,sizeof(log_buff));
 
 	if (events == EV_TIMEOUT)
 	{
@@ -111,11 +110,11 @@ void SendData(int fd, short int events, void *arg)
 				"All_time[accept2recv_event=%d,recv=%d,parse_recv=%d,do_policy=%d,send=%d]"
 				":Send=%s",
 				(int)pthread_self(), fd, 
-				int(p_it->l_time[1].tv_usec - p_it->l_time[0].tv_usec), 
-				int(p_it->l_time[2].tv_usec - p_it->l_time[1].tv_usec), 
-				int(p_it->l_time[3].tv_usec - p_it->l_time[2].tv_usec), 
-				int(p_it->l_time[4].tv_usec - p_it->l_time[3].tv_usec), 
-				int(p_it->l_time[5].tv_usec - p_it->l_time[4].tv_usec),
+				my_time_diff(p_it->l_time[0], p_it->l_time[1]), 
+				my_time_diff(p_it->l_time[1], p_it->l_time[2]), 
+				my_time_diff(p_it->l_time[2], p_it->l_time[3]), 
+				my_time_diff(p_it->l_time[3], p_it->l_time[4]), 
+				my_time_diff(p_it->l_time[4], p_it->l_time[5]),
 				buff);
 		g_log.write_record(log_buff);
 		//send success
@@ -149,7 +148,6 @@ void RecvData(int fd, short int events, void *arg)
 	int buff_len = p_it->recv_buff_len - p_it->now_recv_len;
 	int len;
 	char log_buff[BUFF_SIZE] = {0};
-	memset(log_buff,0,sizeof(log_buff));
 
 	//timeout
 	if (events == EV_TIMEOUT)

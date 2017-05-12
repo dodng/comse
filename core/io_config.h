@@ -53,6 +53,16 @@ printf("file:%s[%d]\t func:%s errno:%d\n", __FILE__,__LINE__,__func__,errno); \
 
 typedef void (* event_cb_func)(int fd, short int events, void *arg);
 
+inline int my_time_diff(struct timeval &start,struct timeval &end)
+{
+        if (start.tv_usec <= end.tv_usec)
+        {
+                return (end.tv_usec-start.tv_usec);
+        }
+        else
+                return (1000000 - start.tv_usec + end.tv_usec);
+}
+
 struct sig_ev_arg 
 {
 	void *ptr;
@@ -106,7 +116,7 @@ class interface_data
 		struct event ev;
 		int status;
 		int sd;
-		struct timeval l_time[6];
+        struct timeval l_time[6];
 		http_entity http;
 		policy_entity policy;
 };
