@@ -100,6 +100,8 @@ void SendData(int fd, short int events, void *arg)
 	} 
 
 	len = send(fd, buff, p_it->now_send_len, MSG_NOSIGNAL);
+	if (p_it->now_send_len < p_it->send_buff_len) {p_it->send_buff[p_it->now_send_len] = '\0';}
+
 	gettimeofday(&p_it->l_time[5],0);
 	event_del(p_ev);
 
@@ -172,7 +174,9 @@ void RecvData(int fd, short int events, void *arg)
 		p_it->status = status_recv;
 		//regist send event
 		p_it->now_recv_len += len;
+		if (p_it->now_recv_len < p_it->recv_buff_len) {p_it->recv_buff[p_it->now_recv_len] = '\0';}
 		int parse_ret = p_it->http.parse_done((char *)(p_it->recv_buff));
+
 		snprintf(log_buff,sizeof(log_buff),"Thread[%x]\tClient[%d]:Recv=[%s]:Parse=[%d]",(int)pthread_self(),fd, buff, parse_ret);
 		g_log.write_record(log_buff);
 
