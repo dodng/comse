@@ -1,6 +1,7 @@
 #include "policy_interface.h"
 #include "cppjieba/Jieba.hpp"
 #include "search_engine.h"
+#include "easy_log.h"
 
 ////////////////////////////////
 //notice multithread is safe ? yes,add mutex lock
@@ -26,7 +27,12 @@ Json::Reader g_json_reader;
 pthread_mutex_t g_json_reader_lock = PTHREAD_MUTEX_INITIALIZER;
 Json::FastWriter g_json_writer;
 pthread_mutex_t g_json_writer_lock = PTHREAD_MUTEX_INITIALIZER;
-Search_Engine g_search_engine(DUMP_FILE_PATH,LOAD_FILE_PATH);
+
+//Search_Engine g_search_engine(DUMP_FILE_PATH,LOAD_FILE_PATH);
+Search_Engine *g_search_engine_p = 0;
+pthread_rwlock_t g_search_engine_lock = PTHREAD_RWLOCK_INITIALIZER;
+//log
+extern easy_log g_log;
 
 ////////////////////////////////
 
@@ -185,8 +191,14 @@ int policy_entity::get_out_json()
 			json_in["cmd_info"]["term4se"] = term_list_json;
 		}
 
-		if (g_search_engine.add(term_list,json_in))
-			//		if (g_search_engine.add(term_list,json_in["show_info"]))
+		bool se_ret = false;
+		{
+			// enter lock space
+			AUTO_LOCK auto_lock(&g_search_engine_lock,false);
+			se_ret = g_search_engine_p->add(term_list,json_in);
+		}
+
+		if (se_ret)
 		{
 			//return true
 			ret = 0;
@@ -204,7 +216,13 @@ int policy_entity::get_out_json()
 		{//get term_list
 			policy_cut_query(g_jieba,query,term_list);
 		}
-		if (g_search_engine.del(term_list,json_in))
+		bool se_ret = false;
+		{
+			// enter lock space
+			AUTO_LOCK auto_lock(&g_search_engine_lock,false);
+			se_ret = g_search_engine_p->del(term_list,json_in);
+		}
+		if (se_ret)
 		{
 			//return true
 			ret = 0;
@@ -242,7 +260,15 @@ int policy_entity::get_out_json()
 			json_in["cmd_info"]["term4se"] = term_list_json;
 		}
 
-		if (g_search_engine.search(term_list,query,json_in,info_vec,score_vec,recall_num,start_id,ret_num,max_ret_num,search_mode))
+		bool se_ret = false;
+		{
+			// enter lock space
+			AUTO_LOCK auto_lock(&g_search_engine_lock,false);
+			se_ret = g_search_engine_p->search(term_list,query,json_in,
+					info_vec,score_vec,recall_num,
+					start_id,ret_num,max_ret_num,search_mode);
+		}
+		if (se_ret)
 		{
 			//return true
 			ret = 0;
@@ -259,7 +285,13 @@ int policy_entity::get_out_json()
 	}
 	else if (json_in["cmd_type"].asString() == "dump_all" )
 	{
-		if (g_search_engine.dump_to_file())
+		bool se_ret = false;
+		{
+			// enter lock space
+			AUTO_LOCK auto_lock(&g_search_engine_lock,false);
+			se_ret = g_search_engine_p->dump_to_file();
+		}
+		if (se_ret)
 		{
 			ret = 0;
 		}
@@ -268,9 +300,45 @@ int policy_entity::get_out_json()
 			ret = 400;
 		}
 	}
+	else if (json_in["cmd_type"].asString() == "reload_all")
+	{
+		Search_Engine *tmp_old_p = 0;
+		Search_Engine *tmp_new_p = 0;
+		// dump old index
+		{
+			g_log.write_record("reload_index_1:dump_old_index do");
+			// enter lock space
+			AUTO_LOCK auto_lock(&g_search_engine_lock,false);
+			g_search_engine_p->dump_to_file();
+			g_log.write_record("reload_index_1:dump_old_index done");
+		}	
+		// load new index
+		{
+			g_log.write_record("reload_index_2:load_new_index do");
+			tmp_new_p = new Search_Engine(DUMP_FILE_PATH,DUMP_FILE_PATH);
+			// enter lock space
+			AUTO_LOCK auto_lock(&g_search_engine_lock,false);
+			tmp_new_p->load_from_file();
+			g_log.write_record("reload_index_2:load_new_index done");
+		}
+		// exchange old and new
+		{
+			g_log.write_record("reload_index_3:exchange_index do");
+			// enter lock space
+			AUTO_LOCK auto_lock(&g_search_engine_lock,true);
+			tmp_old_p = g_search_engine_p;
+			g_search_engine_p = tmp_new_p;
+			g_log.write_record("reload_index_3:exchange_index done");
+		}
+		// release old index
+		g_log.write_record("reload_index_4:release_old_index do");
+		if (tmp_old_p){delete tmp_old_p;}
+		g_log.write_record("reload_index_4:release_old_index done");
+		ret = 0;
+	}
 	else
 	{
-		ret = 500;
+		ret = 900;
 	}
 
 	//load info
@@ -341,5 +409,12 @@ int policy_entity::do_one_action(http_entity *it_http_p,char *send_buff_p,int bu
 
 bool policy_interface_init_once()
 {
-	return g_search_engine.load_from_file();
+	g_search_engine_p = new Search_Engine(DUMP_FILE_PATH,LOAD_FILE_PATH);
+	bool se_ret = false;
+	{
+		// enter lock space
+		AUTO_LOCK auto_lock(&g_search_engine_lock,false);
+		se_ret = g_search_engine_p->load_from_file();
+	}
+	return se_ret;
 }

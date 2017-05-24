@@ -372,6 +372,7 @@ bool Search_Engine::add(std::vector<std::string> & term_list,Json::Value & one_i
 			}
 		}
 	}
+
 	return ret;
 }
 
@@ -493,7 +494,7 @@ bool Search_Engine::search(std::vector<std::string> & in_term_list,
 	//compute every index score,and get the need number vector,can use min heap sort
 	std::vector< sort_myclass > vect_score;
 	vect_score.reserve(MAX_RECALL_NUM + 128);
-	
+
 	search_compute(query_in_it, in_query, in_term_list, query_json, search_mode, vect_score);
 
 	//sort
@@ -528,7 +529,7 @@ bool Search_Engine::search(std::vector<std::string> & in_term_list,
 
 	//filter some result
 	search_filter(in_term_list, in_query, out_info_vec_ori, search_mode, out_ret_vec_ori);
-	
+
 	for (int i = 0 ;i < out_info_vec_ori.size();i++)
 	{
 		if (out_ret_vec_ori[i])

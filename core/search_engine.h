@@ -47,7 +47,7 @@ enum search_mode
 #define DEFAULT_ADD_NEED_SHRINK_NODE (128)
 #define MAX_GETLINE_BUFF (1024*1024)
 #define OR_SEARCH_SKIP_TERM_INDEX_LENGTH (20000)
-
+#define RELOAD_INDEX_THRESHOLD (10*1024*1024)
 /////
 struct info_storage
 {
@@ -80,6 +80,18 @@ class Search_Engine{
 		}
 		~Search_Engine()
 		{
+			//stl data destroy
+#ifdef _USE_HASH_
+			{			
+				std::tr1::unordered_map<uint32_t,info_storage>().swap(_info_dict);
+				std::tr1::unordered_map<std::string,uint32_t>().swap(_info_md5_dict);
+			}
+#else
+			{
+				std::map<uint32_t,info_storage>().swap(_info_dict);
+				std::map<std::string,uint32_t>().swap(_info_md5_dict);
+			}
+#endif
 			//lock destroy
 			pthread_rwlock_destroy(&_info_dict_lock);
 			pthread_rwlock_destroy(&_info_md5_dict_lock);
