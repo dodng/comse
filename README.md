@@ -47,6 +47,7 @@ python example:
 * and search data
 * or search data
 * dump-all data(default path: ./index/dump.json.file)
+* reload-all data(prevent index_num to max(int))
 
 ```
 cd comse/examples ; python client_update.py message.add
@@ -54,6 +55,7 @@ cd comse/examples ; python client_update.py message.del
 cd comse/examples ; python client_search.py message.and-search
 cd comse/examples ; python client_search.py message.or-search
 cd comse/examples ; python client_update.py message.dump-all
+cd comse/examples ; python client_update.py message.reload-all
 
 ```
 
