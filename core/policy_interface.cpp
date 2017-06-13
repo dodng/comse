@@ -1,6 +1,6 @@
 #include "policy_interface.h"
 #include "cppjieba/Jieba.hpp"
-#include "search_engine.h"
+#include "search_engine_fast.h"
 #include "easy_log.h"
 
 ////////////////////////////////
@@ -29,7 +29,8 @@ Json::FastWriter g_json_writer;
 pthread_mutex_t g_json_writer_lock = PTHREAD_MUTEX_INITIALIZER;
 
 //Search_Engine g_search_engine(DUMP_FILE_PATH,LOAD_FILE_PATH);
-Search_Engine *g_search_engine_p = 0;
+Search_Engine_Fast *g_search_engine_p = 0;
+
 pthread_rwlock_t g_search_engine_lock = PTHREAD_RWLOCK_INITIALIZER;
 //log
 extern easy_log g_log;
@@ -302,8 +303,8 @@ int policy_entity::get_out_json()
 	}
 	else if (json_in["cmd_type"].asString() == "reload_all")
 	{
-		Search_Engine *tmp_old_p = 0;
-		Search_Engine *tmp_new_p = 0;
+		Search_Engine_Fast *tmp_old_p = 0;
+		Search_Engine_Fast *tmp_new_p = 0;
 		// dump old index
 		{
 			g_log.write_record("reload_index_1:dump_old_index do");
@@ -315,7 +316,7 @@ int policy_entity::get_out_json()
 		// load new index
 		{
 			g_log.write_record("reload_index_2:load_new_index do");
-			tmp_new_p = new Search_Engine(DUMP_FILE_PATH,DUMP_FILE_PATH);
+			tmp_new_p = new Search_Engine_Fast(DUMP_FILE_PATH,DUMP_FILE_PATH);
 			// enter lock space
 			AUTO_LOCK auto_lock(&g_search_engine_lock,false);
 			tmp_new_p->load_from_file();
@@ -409,7 +410,7 @@ int policy_entity::do_one_action(http_entity *it_http_p,char *send_buff_p,int bu
 
 bool policy_interface_init_once()
 {
-	g_search_engine_p = new Search_Engine(DUMP_FILE_PATH,LOAD_FILE_PATH);
+	g_search_engine_p = new Search_Engine_Fast(DUMP_FILE_PATH,LOAD_FILE_PATH);
 	bool se_ret = false;
 	{
 		// enter lock space
