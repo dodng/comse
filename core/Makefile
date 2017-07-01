@@ -1,5 +1,5 @@
 CC = g++
-FLAGS = -g -D _USE_HASH_
+FLAGS = -g -D _USE_HASH_ 
 INC = -I./libevent-1.4.14-stable -I./jsoncpp/include -I./cppjieba/include -I./cppjieba/deps
 EXE = comse
 JSONLIB = libjsoncpp.a

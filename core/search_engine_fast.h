@@ -26,7 +26,7 @@
 #include <vector>
 #include "cppjieba/Jieba.hpp"
 #include <set>
-
+#include "query_analyse.h"
 /////
 
 //int policy_compute_score(std::string &query,std::vector<std::string> & term_list,Json::Value & query_json,info_storage & one_info,int search_mode);
@@ -42,6 +42,7 @@ enum search_mode
 #define INDEX_ONE_NODE_NUM (64)
 #define INDEX_TERM_LOCK_NUM (128)
 #define DEFAULT_SCORE (0)
+#define DEFAULT_FLOAT_SCORE (0.0f)
 #define DEFAULT_DEL_NEED_SHRINK (1024*2)
 #define DEFAULT_ADD_NEED_SHRINK_AVG ((INDEX_ONE_NODE_NUM)*2)
 #define DEFAULT_ADD_NEED_SHRINK_NODE (128)
@@ -202,6 +203,8 @@ class Search_Engine_Fast{
 		//file
 		std::string _dump_file;
 		std::string _load_file;
+		//query analyse
+		Query_Analyse _qa;
 
 };
 

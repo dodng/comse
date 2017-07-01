@@ -5,6 +5,7 @@
 #include "easy_log.h"
 #include <sys/time.h>
 #include "rank_lcs.h"
+#include <math.h>
 
 extern cppjieba::Jieba g_jieba;
 extern pthread_mutex_t g_jieba_lock;
@@ -83,16 +84,14 @@ int get_rela_score_2(std::set<uint32_t> &term4se_set_1,std::set<uint32_t> &term4
 	return (int)((and_len * 100.0f) / (min_len));
 }
 
-int policy_compute_score(std::string &query,std::vector<std::string> & term_list,std::vector<uint32_t> & term_list_int,Json::Value & query_json,info_storage & one_info,int search_mode)
+int policy_compute_score(std::string &query,std::vector<std::string> & term_list,std::vector<float> & term_list_score,std::vector<uint32_t> & term_list_int,Json::Value & query_json,info_storage & one_info,int search_mode)
 {
-	int ret = DEFAULT_SCORE;
+	float ret = DEFAULT_FLOAT_SCORE;
 	if (one_info.info_json_ori_str.size() <= 0 || 
 			one_info.title4se.size() <= 0 ) {return ret;}
 
 	if (search_mode == or_mode || search_mode == rela_mode)
 	{
-		int or_terms_length = 0;
-		int or_terms_num = 0;
 
 		if ( one_info.term4se_set.size() > 0)
 		{
@@ -103,28 +102,29 @@ int policy_compute_score(std::string &query,std::vector<std::string> & term_list
 				term_hash_it = one_info.term4se_set.find(term_list_int[i]);
 				if (term_hash_it != one_info.term4se_set.end()) 
 				{
-					or_terms_length += term_list[i].size();
-					or_terms_num++;
+					ret += term_list_score[i];
 				}
 			}
 		}
 
-		ret = (or_terms_num * 1000 + or_terms_length);
 	}
 	else
 	{
 		ret = (1000 - one_info.title4se.size());
 	}
-	return (ret * 1000);
+	return int(ret * 1000);
 }
 
 void policy_cut_query(cppjieba::Jieba &jieba,std::string & query,std::vector<std::string> &term_list)
 {
+	std::string log_string;
+
 	if (query.size() <= 0) {return;}
 	std::vector<cppjieba::Word> jiebawords;
 	{//enter auto mutex lock
 		AutoLock_Mutex auto_lock0(&g_jieba_lock);
-		jieba.CutForSearch(query, jiebawords, true);
+		//jieba.CutForSearch(query, jiebawords, true);
+		jieba.Cut(query, jiebawords, true);
 	}
 
 	//clear
@@ -178,7 +178,7 @@ bool info_2_json(info_storage & info_stg, std::string & json_output_str,void *p_
 {
 	if (0 == p_ptr) {return false;}
 	Search_Engine_Fast *se_fast_p = (Search_Engine_Fast *)p_ptr;
-	
+
 	json_output_str.clear();
 	json_output_str += "{\"cmd_info\":{\"term4se\":[";
 	for (std::set<uint32_t>::iterator it = info_stg.term4se_set.begin(); it != info_stg.term4se_set.end() ;it++)
@@ -338,6 +338,8 @@ bool Search_Engine_Fast::add(std::vector<std::string> & term_list,Json::Value & 
 	//load info
 	info_storage info_stg;
 	json_2_info(one_info,json_str,info_stg,this);
+	//load qa
+	_qa.insert_query(term_list);
 
 	//add info
 	{// enter lock 
@@ -537,7 +539,7 @@ bool Search_Engine_Fast::search(std::vector<std::string> & in_term_list,
 			int rela_score = get_rela_score_2(in_term_list,out_info_vec_ori[i].term4se_set,this);
 			out_info_vec.push_back(out_info_vec_ori[i].info_json_ori_str);
 			//dump score to json
-			out_score_vec.push_back(out_score_vec_ori[i] + rela_score);
+			out_score_vec.push_back(out_score_vec_ori[i]*1000 + rela_score);
 			//max_ret_num = real return nums
 			if (out_info_vec.size() >= in_max_ret_num) {break;}
 		}
@@ -804,6 +806,22 @@ void Search_Engine_Fast::search_compute(std::vector<uint32_t> & query_in_it,
 	for (int i = 0;i < in_term_list.size();i++)
 	{in_term_list_int.push_back(query_term(in_term_list[i]));}
 
+	//cook term_list_score for compute core
+	std::vector<float> in_term_list_float;
+	for (int i = 0;i < in_term_list.size();i++)
+	{in_term_list_float.push_back(_qa.get_term_score(in_term_list[i]));}
+	//output debug
+	std::string log_buff_str;
+	log_buff_str = "qa_debug:";
+	for (int i = 0;i < in_term_list.size();i++)
+	{
+		char float_str[32] = {0};
+		log_buff_str += in_term_list[i];
+		snprintf(float_str,sizeof(float_str),":%.4f|",in_term_list_float[i]);
+		log_buff_str += float_str;
+	}
+	g_log.write_record(log_buff_str.c_str());
+
 	for (int i = 0; i < query_in_it.size(); i++)
 	{
 #ifdef _USE_HASH_
@@ -813,7 +831,7 @@ void Search_Engine_Fast::search_compute(std::vector<uint32_t> & query_in_it,
 #endif
 		if (it != _info_dict.end())
 		{
-			int score = policy_compute_score(in_query,in_term_list,in_term_list_int,query_json,it->second,search_mode);
+			int score = policy_compute_score(in_query,in_term_list,in_term_list_float,in_term_list_int,query_json,it->second,search_mode);
 			sort_myclass my(query_in_it[i], score);
 			vect_score.push_back(my);
 		}
@@ -840,7 +858,7 @@ void Search_Engine_Fast::search_filter(std::vector<std::string> & in_term_list,
 		for (int i = 0 ;i < out_info_vec_ori.size();i++)
 		{
 			int rela_score = get_rela_score_2(in_term_list,out_info_vec_ori[i].term4se_set,this);
-			if (rela_score < 30 || rela_score >= 90)
+			if (rela_score < 20 || rela_score > 95)
 			{//filter rela score too good or too bad query->obj
 				snprintf(log_buff,sizeof(log_buff),"title[%s]:obj[%s]:rela_score[%d]:filter1:query=%s"
 						,in_query.c_str()
@@ -864,7 +882,7 @@ void Search_Engine_Fast::search_filter(std::vector<std::string> & in_term_list,
 						out_ret_vec_ori[j])
 				{
 					int rela_score = get_rela_score_2(out_info_vec_ori[i].term4se_set,out_info_vec_ori[j].term4se_set,this);
-					if (rela_score >= 80)
+					if (rela_score > 95)
 					{//filter rela score too good obj->obj
 						snprintf(log_buff,sizeof(log_buff),"obj[%s]:obj[%s]:rela_score[%d]:filter2:query=%s"
 								,out_info_vec_ori[i].title4se.c_str()
