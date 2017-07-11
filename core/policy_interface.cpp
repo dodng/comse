@@ -361,6 +361,7 @@ int policy_entity::cook_senddata(char *send_buff_p,int buff_len,int &send_len)
 		json_str = g_json_writer.write(json_out);
 	}
 	if (json_str.size() <= 3) {return 2;}//null is 3 length
+	if (json_str.size() >= buff_len) {return 3;}//json_str is too long
 
 	std::string str = "HTTP/1.1 200 OK\r\nServer: comse\r\n";
 	cook_send_buff(str,send_buff_p,buff_len,send_len);
