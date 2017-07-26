@@ -281,7 +281,7 @@ void SearchAcceptListen(int fd, short what, void *arg)
 		p_read_it->sd = accept_fd;
 		gettimeofday(&p_read_it->l_time[0],0);
 		reg_add_event(&(p_read_it->ev),accept_fd,EV_READ,RecvData,p_read_it,p_ev->ev_base,&tv_recv_timeout);
-		snprintf(log_buff,sizeof(log_buff),"process thread read new client fd[%d]",accept_fd);
+		snprintf(log_buff,sizeof(log_buff),"Thread[%x] process thread read new client fd[%d]", (int)pthread_self(), accept_fd);
 		g_log.write_record(log_buff);
 
 	}
