@@ -166,6 +166,11 @@ std::string str_escape(std::string  str)
 			ret_str += '\\';
 			ret_str += 'n';
 		}
+		else if (  str.c_str()[i] == '"')
+		{
+			ret_str += '\\';
+			ret_str += '"';
+		}
 		else
 		{
 			ret_str += str.c_str()[i];
