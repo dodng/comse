@@ -32,17 +32,23 @@
 
 #else // JSON_USE_EXCEPTION
 
-# define JSON_ASSERT(condition) assert(condition)
+//# define JSON_ASSERT(condition) assert(condition)
+# define JSON_ASSERT(condition) ;
 
 // The call to assert() will show the failure message in debug builds. In
 // release builds we abort, for a core-dump or debugger.
+#if 0
 # define JSON_FAIL_MESSAGE(message)                                            \
   {                                                                            \
     JSONCPP_OSTRINGSTREAM oss; oss << message;                                    \
     assert(false && oss.str().c_str());                                        \
     abort();                                                                   \
   }
-
+#endif
+# define JSON_FAIL_MESSAGE(message)                                            \
+  {                                                                            \
+    ;                                                                   \
+  }
 
 #endif
 
